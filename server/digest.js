@@ -152,13 +152,26 @@ async function sendOne(mailer, synth, sub) {
   const html = buildHtml(intro, blocks);
   const subject = 'Your university brief — ' + total + ' new ' + (total === 1 ? 'headline' : 'headlines');
 
-  if (!mailer) { return { email: sub.email, sent: false, reason: 'no_smtp', headlines: total, html }; }
+  // Preferred: Resend HTTP API (no SMTP / app-passwords / IP blocks).
+  if (process.env.RESEND_API_KEY) {
+    const from = process.env.RESEND_FROM || 'UniScout <onboarding@resend.dev>';
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + process.env.RESEND_API_KEY, 'content-type': 'application/json' },
+      body: JSON.stringify({ from, to: [sub.email], subject, html }),
+    });
+    if (!r.ok) { const t = await r.text(); throw new Error('Resend ' + r.status + ': ' + t.slice(0, 200)); }
+    _markSent.run(sub.email);
+    return { email: sub.email, sent: true, headlines: total, via: 'resend' };
+  }
+
+  if (!mailer) { return { email: sub.email, sent: false, reason: 'no_email_provider', headlines: total, html }; }
   await mailer.sendMail({
     from: process.env.SMTP_FROM || ('UniScout <' + process.env.SMTP_USER + '>'),
     to: sub.email, subject, html,
   });
   _markSent.run(sub.email);
-  return { email: sub.email, sent: true, headlines: total };
+  return { email: sub.email, sent: true, headlines: total, via: 'smtp' };
 }
 
 /* Run the digest for every subscriber (or just one email, for testing). */

@@ -1,0 +1,27 @@
+name: Daily university digest
+
+# Runs every day at 08:00 UTC, and can also be triggered by hand from the
+# Actions tab (workflow_dispatch). It sends you the news email about the
+# universities listed in server/digest-targets.json.
+on:
+  schedule:
+    # 09:00 UTC = 11:00 in Madrid (summer/CEST). In winter it lands at 10:00 local.
+    - cron: "0 9 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install server deps
+        run: cd server && npm install --omit=dev
+      - name: Send the digest
+        run: cd server && node digest-cron.js
+        env:
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          RESEND_FROM: "UniScout <onboarding@resend.dev>"
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
