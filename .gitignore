@@ -1,0 +1,21 @@
+# ── Secrets — NEVER commit these ──
+.env
+**/.env
+*.env
+!**/.env.example
+
+# ── Dependencies (re-installed with `npm install`) ──
+node_modules/
+**/node_modules/
+
+# ── Local data / caches / build artifacts ──
+**/*.db
+**/*.db-shm
+**/*.db-wal
+server/local_cache/
+server/data/batches/
+agent/output/
+
+# ── OS / editor noise ──
+.DS_Store
+*.log

@@ -1,0 +1,8 @@
+{
+  "_comment": "These are the universities the agent monitors = your SAVED favourites. Replace this list with your own saved universities. 'news' is optional (the agent will probe common news paths if omitted). See README for how to export your favourites from the app.",
+  "universities": [
+    { "name": "University of Oxford",        "website": "https://www.ox.ac.uk",        "news": "https://www.ox.ac.uk/news" },
+    { "name": "University of Cambridge",      "website": "https://www.cam.ac.uk",       "news": "https://www.cam.ac.uk/news" },
+    { "name": "Imperial College London",     "website": "https://www.imperial.ac.uk",  "news": "https://www.imperial.ac.uk/news" }
+  ]
+}
