@@ -88,6 +88,10 @@
             <button class="adm__nav__item" data-tab="cities">
                 <i class="fa-solid fa-city"></i><span>Cities</span>
             </button>
+            <button class="adm__nav__item" data-tab="elite">
+                <i class="fa-solid fa-crown"></i><span>Elite</span>
+                <span class="adm__nav__badge" id="navBadgeElite">0</span>
+            </button>
             <button class="adm__nav__item" data-tab="settings">
                 <i class="fa-solid fa-gear"></i><span>Settings</span>
             </button>
@@ -334,6 +338,28 @@
         </section>
 
         <!-- ── TAB: SETTINGS ── -->
+        <section class="adm__tab" id="tabElite" style="display:none;">
+            <div class="adm__card">
+                <div class="adm__card__head">
+                    <span><i class="fa-solid fa-crown"></i> Elite Members</span>
+                    <button class="adm__settings__btn" id="eliteRefresh" style="margin:0;padding:8px 14px"><i class="fa-solid fa-rotate"></i> Refresh</button>
+                </div>
+                <div class="adm__settings__body">
+                    <p class="adm__settings__desc">Everyone with an active Elite subscription — live from Stripe. These are exactly the people who receive the weekly news digest.</p>
+                    <div class="adm__field" id="eliteTokenWrap">
+                        <label class="adm__label">Server admin token <span style="opacity:.6">(the ADMIN_TOKEN you set in Render)</span></label>
+                        <div class="adm__input__wrap">
+                            <i class="fa-solid fa-key adm__input__icon"></i>
+                            <input class="adm__input" type="password" id="eliteToken" placeholder="Paste ADMIN_TOKEN…">
+                        </div>
+                        <button class="adm__settings__btn" id="eliteConnectBtn" style="margin-top:10px"><i class="fa-solid fa-plug"></i> Connect</button>
+                    </div>
+                    <div id="eliteStatus" style="margin:12px 0;font-size:13px;color:#8a909c"></div>
+                    <div id="eliteList"></div>
+                </div>
+            </div>
+        </section>
+
         <section class="adm__tab" id="tabSettings" style="display:none;">
             <div class="adm__settings__grid">
                 <div class="adm__card">

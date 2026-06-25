@@ -213,6 +213,7 @@ var NAV_TABS = {
     saved:        'tabSaved',
     universities: 'tabUniversities',
     cities:       'tabCities',
+    elite:        'tabElite',
     settings:     'tabSettings'
 };
 
@@ -223,6 +224,7 @@ var NAV_TITLES = {
     saved:        'Saved Universities',
     universities: 'Universities',
     cities:       'Cities',
+    elite:        'Elite Members',
     settings:     'Settings'
 };
 
@@ -249,7 +251,75 @@ function switchTab(tab) {
     });
 
     document.getElementById('admPageTitle').textContent = NAV_TITLES[tab] || tab;
+
+    if (tab === 'elite') loadEliteMembers();
 }
+
+/* ── Elite members (live from the Stripe-backed server) ───────────────── */
+var ELITE_TOKEN_KEY = 'uniscout_admin_server_token';
+function adminApiBase() {
+    if (location.protocol === 'file:') return 'http://localhost:4242';
+    var isLocal = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+    if (isLocal && location.port !== '4242') return 'http://localhost:4242';
+    return location.origin;
+}
+function renderEliteMembers(members) {
+    var list = document.getElementById('eliteList');
+    var badge = document.getElementById('navBadgeElite');
+    if (badge) badge.textContent = members.length;
+    if (!list) return;
+    if (!members.length) {
+        list.innerHTML = '<p style="color:#8a909c;font-size:13.5px">No Elite members yet. When someone buys an Elite subscription they appear here automatically.</p>';
+        return;
+    }
+    list.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:13.5px;margin-top:6px">' +
+        '<thead><tr style="text-align:left;color:#8a909c;border-bottom:1px solid #eee">' +
+        '<th style="padding:8px 6px">Email</th><th style="padding:8px 6px">Destination</th><th style="padding:8px 6px">Saved universities</th></tr></thead><tbody>' +
+        members.map(function (m) {
+            var unis = m.universities || [];
+            return '<tr style="border-bottom:1px solid #f3f3f3">' +
+                '<td style="padding:8px 6px;font-weight:600">' + esc(m.email) + '</td>' +
+                '<td style="padding:8px 6px">' + esc((m.country || '—').toUpperCase()) + '</td>' +
+                '<td style="padding:8px 6px;color:#555">' + (unis.length ? esc(unis.join(', ')) : '<span style="opacity:.5">none yet</span>') + '</td>' +
+            '</tr>';
+        }).join('') + '</tbody></table>';
+}
+function loadEliteMembers() {
+    var status = document.getElementById('eliteStatus');
+    var wrap = document.getElementById('eliteTokenWrap');
+    var tok = localStorage.getItem(ELITE_TOKEN_KEY) || '';
+    if (!tok) { if (status) status.textContent = 'Enter your server admin token above to load Elite members.'; return; }
+    if (wrap) wrap.style.display = 'none';
+    if (status) status.textContent = 'Loading…';
+    fetch(adminApiBase() + '/api/admin/elite', { headers: { 'x-admin-token': tok } })
+        .then(function (r) { return r.json().then(function (d) { return { ok: r.ok, d: d }; }); })
+        .then(function (res) {
+            if (!res.ok) {
+                localStorage.removeItem(ELITE_TOKEN_KEY);
+                if (wrap) wrap.style.display = '';
+                if (status) status.textContent = 'Rejected: ' + ((res.d && (res.d.message || res.d.error)) || 'unauthorized') + '. Check the ADMIN_TOKEN.';
+                return;
+            }
+            if (status) status.textContent = res.d.count + ' Elite member' + (res.d.count === 1 ? '' : 's') + ' · live from Stripe';
+            renderEliteMembers(res.d.members || []);
+        })
+        .catch(function () {
+            if (wrap) wrap.style.display = '';
+            if (status) status.textContent = 'Could not reach the server (' + adminApiBase() + ').';
+        });
+}
+(function initElite() {
+    var connect = document.getElementById('eliteConnectBtn');
+    var input = document.getElementById('eliteToken');
+    var refresh = document.getElementById('eliteRefresh');
+    if (connect && input) connect.addEventListener('click', function () {
+        var v = input.value.trim();
+        if (!v) return;
+        localStorage.setItem(ELITE_TOKEN_KEY, v);
+        loadEliteMembers();
+    });
+    if (refresh) refresh.addEventListener('click', loadEliteMembers);
+}());
 
 function initClock() {
     function tick() {
