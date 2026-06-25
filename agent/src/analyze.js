@@ -62,7 +62,7 @@ function buildReportHeuristic(evidence) {
     return { university: ev.university, source: ev.sourceType || 'official', url: ev.sourceUrl || '', items: items };
   });
   return {
-    subject: 'UniScout — Latest from your saved universities',
+    subject: 'UniVersity — Latest from your saved universities',
     summary: 'Here are the newest updates from the universities you saved.',
     findings: findings,
   };
@@ -70,7 +70,7 @@ function buildReportHeuristic(evidence) {
 
 function normalize(parsed, evidence) {
   var report = parsed && typeof parsed === 'object' ? parsed : {};
-  report.subject = report.subject || 'UniScout — Latest from your saved universities';
+  report.subject = report.subject || 'UniVersity — Latest from your saved universities';
   report.summary = report.summary || 'Here are the newest updates from your saved universities.';
   report.findings = Array.isArray(report.findings) ? report.findings : [];
   report.findings = report.findings.map(function (f) {
@@ -103,7 +103,7 @@ async function rephraseWithOpenAI(evidence) {
   });
 
   var system =
-    'You are UniScout\'s news assistant. You receive scraped news items (titles + URLs) for a student\'s ' +
+    'You are UniVersity\'s news assistant. You receive scraped news items (titles + URLs) for a student\'s ' +
     'saved universities. Rewrite each item in SHORT, CLEAR, friendly human language (max ~1 sentence). ' +
     'Classify each item:\n' +
     '- "event": something the student can ATTEND or PREPARE FOR (open days, application/scholarship deadlines, ' +

@@ -2,7 +2,7 @@
   "name": "uniscout-payments",
   "version": "1.0.0",
   "private": true,
-  "description": "Stripe subscription backend (Elite plan) for UniScout",
+  "description": "Stripe subscription backend (Elite plan) for UniVersity",
   "main": "server.js",
   "type": "commonjs",
   "scripts": {

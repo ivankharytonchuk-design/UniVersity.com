@@ -1,6 +1,6 @@
 'use strict';
 /* ────────────────────────────────────────────────────────────────────────────
-   UniScout — high-throughput comment collection engine
+   UniVersity — high-throughput comment collection engine
 
    Goal: collect large volumes of REAL student review comments fast, dedupe them,
    and stage them for downstream processing / translation / the AI-reviews RAG.

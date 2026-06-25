@@ -1,4 +1,4 @@
-# UniScout News Agent
+# UniVersity News Agent
 
 A small backend agent (no chat UI — run it, get an email) that:
 
@@ -6,7 +6,7 @@ A small backend agent (no chat UI — run it, get an email) that:
 2. **Rephrases** those scraped items into short, friendly language and classifies each as an **event** (something to attend / a deadline, with a date) or an **article** (news to read). This uses **OpenAI or Groq** — and only ever sees the scraped titles + URLs, so it can't invent news. Without a key it falls back to built-in phrasing.
 3. **Emails** the report to you via **Mailjet**, with “Save to Deadlines” buttons for dated events.
 
-> ℹ️ This is the standalone, official-site-scraper agent. UniScout also has an
+> ℹ️ This is the standalone, official-site-scraper agent. UniVersity also has an
 > integrated, always-on digest in `../server` (Google News + your live saved list +
 > a profile toggle + cron deploy). Use **one** of them so you don't get double emails.
 
@@ -54,7 +54,7 @@ Mailjet rejects mail from an unvalidated address. In Mailjet:
 **Senders & Domains → Add a sender** → enter `EMAIL_FROM` → click the link in the confirmation email Mailjet sends. (For production, validate a whole domain instead.)
 
 ## 4. Choose which universities
-The agent only looks at the universities in [`config/watchlist.json`](config/watchlist.json). Replace the sample list with your saved favourites. To see your saved IDs from the app, open UniScout logged in and run in the browser console:
+The agent only looks at the universities in [`config/watchlist.json`](config/watchlist.json). Replace the sample list with your saved favourites. To see your saved IDs from the app, open UniVersity logged in and run in the browser console:
 ```js
 const s = JSON.parse(localStorage.getItem('uniscout_session'));
 console.log(JSON.parse(localStorage.getItem('us_saved_' + s.id) || '[]'));

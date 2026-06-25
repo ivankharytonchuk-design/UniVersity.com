@@ -1,6 +1,6 @@
 'use strict';
 /* ────────────────────────────────────────────────────────────────────────────
-   UniScout Intelligence — corpus ingestion helper
+   UniVersity Intelligence — corpus ingestion helper
 
    Use this to GROW the real-comment corpus toward 150 comments per university /
    city without hand-editing the big JSON. Drop a batch of new comments into a

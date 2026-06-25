@@ -1,5 +1,5 @@
 'use strict';
-/* Shared interactions for the UniScout marketing pages
+/* Shared interactions for the UniVersity marketing pages
    (index.html, subscription.html, feature.html) */
 (function () {
     // current year (if present)

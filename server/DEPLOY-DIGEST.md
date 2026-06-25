@@ -13,7 +13,7 @@ Everything is already coded — you just deploy and paste a few secrets.
 |---|---|
 | `SMTP_USER` | your Gmail address, e.g. `ivan.kharytonchuk10@gmail.com` |
 | `SMTP_PASS` | a Gmail **App Password** (Google Account → Security → 2-Step Verification → App passwords) |
-| `SMTP_FROM` | e.g. `UniScout <ivan.kharytonchuk10@gmail.com>` |
+| `SMTP_FROM` | e.g. `UniVersity <ivan.kharytonchuk10@gmail.com>` |
 | `DIGEST_CRON_TOKEN` | any long random string — protects the trigger URL |
 | `OPENAI_API_KEY` | (optional) your Groq/OpenAI key for the friendly intro line |
 

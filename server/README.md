@@ -1,6 +1,6 @@
-# UniScout — Elite Subscription (Stripe) Backend
+# UniVersity — Elite Subscription (Stripe) Backend
 
-Production-ready Stripe **subscription** system for the UniScout site.
+Production-ready Stripe **subscription** system for the UniVersity site.
 
 - **Plan:** Elite
 - **Price:** €15.00 / **year** (recurring)
@@ -96,7 +96,7 @@ Keys are **never hardcoded** — everything reads from `process.env`.
 
 1. **Get your API keys**: Dashboard → *Developers → API keys*. Put the secret +
    publishable keys in `.env`. (Use **test mode** while developing.)
-2. **Price**: nothing to do — the server auto-creates the *UniScout Elite* product and
+2. **Price**: nothing to do — the server auto-creates the *UniVersity Elite* product and
    a €15/year recurring price on first boot. *(Optional:* create one yourself under
    *Product catalog* and set `STRIPE_PRICE_ID`.)*
 3. **Customer Portal**: Dashboard → *Settings → Billing → Customer portal* → **Activate**.

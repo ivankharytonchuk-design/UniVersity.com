@@ -1,6 +1,6 @@
 'use strict';
 /* ────────────────────────────────────────────────────────────────────────────
-   UniScout — daily student news brief.
+   UniVersity — daily student news brief.
 
    For each subscriber's saved universities the agent pulls recent news, then
    CURATES it down to what a prospective student actually cares about — events,
@@ -84,7 +84,7 @@ async function fetchNews(query, max = 12, days = 30) {
   const q = encodeURIComponent(query + (days ? ' when:' + days + 'd' : ''));
   const url = 'https://news.google.com/rss/search?q=' + q + '&hl=en-US&gl=US&ceid=US:en';
   try {
-    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (UniScout digest)' } });
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (UniVersity digest)' } });
     if (!r.ok) return [];
     const xml = await r.text();
     const items = []; const re = /<item>([\s\S]*?)<\/item>/g; let m;
@@ -236,7 +236,7 @@ function buildHtml({ intro, uniBlocks, countryBlock }) {
     : '';
   return '<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;background:#faf9f5;padding:0">' +
     '<div style="background:linear-gradient(135deg,#d97c14,#f59220);padding:22px 24px;border-radius:14px 14px 0 0">' +
-      '<div style="color:#fff;font-size:20px;font-weight:800">UniScout · Daily Brief</div>' +
+      '<div style="color:#fff;font-size:20px;font-weight:800">UniVersity · Daily Brief</div>' +
       '<div style="color:rgba(255,255,255,.9);font-size:13px;margin-top:4px">Events, deadlines &amp; news worth your time</div>' +
     '</div>' +
     '<div style="background:#fff;padding:24px;border:1px solid #eee;border-top:none;border-radius:0 0 14px 14px">' +
@@ -280,7 +280,7 @@ async function sendOne(mailer, synth, sub) {
 
   // Preferred: Resend HTTP API (no SMTP / app-passwords / IP blocks).
   if (process.env.RESEND_API_KEY) {
-    const from = process.env.RESEND_FROM || 'UniScout <onboarding@resend.dev>';
+    const from = process.env.RESEND_FROM || 'UniVersity <onboarding@resend.dev>';
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + process.env.RESEND_API_KEY, 'content-type': 'application/json' },
@@ -293,7 +293,7 @@ async function sendOne(mailer, synth, sub) {
 
   if (!mailer) { return { email: sub.email, sent: false, reason: 'no_email_provider', headlines: total, html }; }
   await mailer.sendMail({
-    from: process.env.SMTP_FROM || ('UniScout <' + process.env.SMTP_USER + '>'),
+    from: process.env.SMTP_FROM || ('UniVersity <' + process.env.SMTP_USER + '>'),
     to: sub.email, subject, html,
   });
   _markSent.run(sub.email);

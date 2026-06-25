@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UniScout — Feature</title>
+    <title>UniVersity — Feature</title>
     <link rel="icon" type="image/png" sizes="32x32" href="images/earth.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,7 +15,7 @@
 
     <!-- NAV -->
     <nav class="nav nav--solid" id="nav">
-        <a href="index.html" class="nav__brand"><img src="images/logo2.png" alt="UniScout">UniScout</a>
+        <a href="index.html" class="nav__brand"><img src="images/logo2.png" alt="UniVersity">UniVersity</a>
         <div class="nav__links" id="navLinks">
             <a href="index.html#features">Features</a>
             <a href="subscription.html">Subscription</a>
@@ -64,7 +64,7 @@
     <section class="sec wrap">
         <div class="sec__head reveal">
             <span class="tag">Explore more</span>
-            <h2 class="display">More of what UniScout <span class="accent-serif grad-text">does</span></h2>
+            <h2 class="display">More of what UniVersity <span class="accent-serif grad-text">does</span></h2>
         </div>
         <div class="bento" id="dpMore"></div>
     </section>
@@ -76,7 +76,7 @@
             <div class="cta__in">
                 <img src="images/logo2.png" alt="">
                 <h2 class="display">Ready to try it yourself?</h2>
-                <p>Create your free account and put UniScout to work on your university search today.</p>
+                <p>Create your free account and put UniVersity to work on your university search today.</p>
                 <a href="log-in.html" class="btn btn--primary"><i class="fa-solid fa-arrow-right-to-bracket"></i> Get started — free</a>
             </div>
         </div>
@@ -86,7 +86,7 @@
     <footer class="footer wrap">
         <div class="footer__grid">
             <div class="footer__brand">
-                <a href="index.html" class="nav__brand"><img src="images/logo2.png" alt="">UniScout</a>
+                <a href="index.html" class="nav__brand"><img src="images/logo2.png" alt="">UniVersity</a>
                 <p>Your AI-powered guide to discovering, comparing and applying to universities around the world.</p>
                 <div class="footer__socials">
                     <a href="#" aria-label="Telegram"><i class="fa-brands fa-telegram"></i></a>
@@ -104,15 +104,15 @@
             </div>
             <div class="footer__col">
                 <h4>Company</h4>
-                <a href="index.html#why">Why UniScout</a>
+                <a href="index.html#why">Why UniVersity</a>
                 <a href="#">Privacy</a>
                 <a href="#">Cookie policy</a>
                 <a href="#">Contact</a>
             </div>
         </div>
         <div class="footer__bottom">
-            <span><b>UniScout.</b> Scout your future.</span>
-            <span>© <span id="year"></span> UniScout · All rights reserved</span>
+            <span><b>UniVersity.</b> Scout your future.</span>
+            <span>© <span id="year"></span> UniVersity · All rights reserved</span>
         </div>
     </footer>
 
@@ -126,7 +126,7 @@
                 name: 'AI matcher', grad: 'g-violet', ico: 'fa-solid fa-magnifying-glass-dollar',
                 tag: 'AI matcher',
                 title: 'Universities scored by how well they <span class="accent-serif grad-text">fit you</span>',
-                lead: 'Tell UniScout about your grades, budget, subjects and goals once. Our matcher compares them against every university\'s real requirements and data to produce a personalised fit score — with the reasoning shown for each.',
+                lead: 'Tell UniVersity about your grades, budget, subjects and goals once. Our matcher compares them against every university\'s real requirements and data to produce a personalised fit score — with the reasoning shown for each.',
                 short: 'Personalised fit scores for every university.',
                 points: [
                     { i: 'fa-solid fa-bullseye', h: 'Personalised fit scores', p: 'Every university is ranked specifically for you — not from a generic global league table.' },
@@ -135,7 +135,7 @@
                 ],
                 steps: [
                     { h: 'Build your profile', p: 'Add your grades, intended subject, languages, budget and preferences in about a minute.' },
-                    { h: 'Get instant matches', p: 'UniScout scores universities by fit and orders them best-first.' },
+                    { h: 'Get instant matches', p: 'UniVersity scores universities by fit and orders them best-first.' },
                     { h: 'Refine & save', p: 'Tweak your filters, save favourites and move the best ones forward.' }
                 ]
             },
@@ -177,7 +177,7 @@
                 name: 'Application assistant', grad: 'g-green', ico: 'fa-solid fa-file-pdf',
                 tag: 'Application assistant',
                 title: 'One profile, a <span class="accent-serif grad-text">submission-ready</span> package',
-                lead: 'Fill in your details and documents once. UniScout assembles a clean, professional application summary as a polished PDF — tailored per university and ready to hand in.',
+                lead: 'Fill in your details and documents once. UniVersity assembles a clean, professional application summary as a polished PDF — tailored per university and ready to hand in.',
                 short: 'A professional application PDF per university.',
                 points: [
                     { i: 'fa-solid fa-file-lines', h: 'Professional PDF', p: 'A branded, admissions-ready dossier — academic profile, achievements and documents.' },
@@ -194,7 +194,7 @@
                 name: 'Deadline tracker', grad: 'g-pink', ico: 'fa-solid fa-bell',
                 tag: 'Deadline tracker',
                 title: 'Never miss an <span class="accent-serif grad-text">important date</span>',
-                lead: 'Keep every application deadline, open day and scholarship date in one calendar. UniScout reminds you ahead of time, so nothing slips through the cracks.',
+                lead: 'Keep every application deadline, open day and scholarship date in one calendar. UniVersity reminds you ahead of time, so nothing slips through the cracks.',
                 short: 'Every key date in one place, with reminders.',
                 points: [
                     { i: 'fa-solid fa-calendar-check', h: 'One unified calendar', p: 'Application, scholarship and open-day dates for your saved universities together.' },
@@ -214,7 +214,7 @@
         if (!FEATURES[id]) id = 'matcher';
         var f = FEATURES[id];
 
-        document.title = 'UniScout — ' + f.name;
+        document.title = 'UniVersity — ' + f.name;
         var ico = document.getElementById('dpIco');
         ico.className = 'dp__hero__ico ' + f.grad;
         ico.innerHTML = '<i class="' + f.ico + '"></i>';

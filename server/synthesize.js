@@ -1,6 +1,6 @@
 'use strict';
 /* ────────────────────────────────────────────────────────────────────────────
-   UniScout Intelligence — Phase 2: synthesis layer
+   UniVersity Intelligence — Phase 2: synthesis layer
 
    The RAG pipeline:
      1. (qdrant.js)  embed the question with local FastEmbed → search Qdrant
@@ -75,7 +75,7 @@ function collectSources(comments) {
 }
 
 const SYSTEM_PROMPT =
-  "You are UniScout AI — basically a friend who's talked to loads of students and residents and gives " +
+  "You are UniVersity AI — basically a friend who's talked to loads of students and residents and gives " +
   "people the real, honest lowdown on universities and cities. The real student/resident opinions handed " +
   "to you are your only knowledge; everything you say comes from them.\n" +
   "How to talk:\n" +

@@ -67,17 +67,17 @@ function buildHtml(report) {
         '</ul></div>' : '';
 
   return '' +
-    '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Your latest university updates from UniScout.</div>' +
+    '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">Your latest university updates from UniVersity.</div>' +
     '<div style="background:#f3f4fa;padding:30px 0;font-family:-apple-system,Segoe UI,Roboto,Arial,sans-serif;">' +
       '<div style="max-width:620px;margin:0 auto;padding:0 16px;">' +
         '<div style="background:linear-gradient(135deg,' + BRAND + ',' + BRAND2 + ');color:#fff;padding:30px 28px;border-radius:20px 20px 0 0;">' +
-          '<div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;opacity:.85;">UniScout</div>' +
+          '<div style="font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;opacity:.85;">UniVersity</div>' +
           '<div style="font-size:22px;font-weight:900;margin-top:8px;line-height:1.3;">' + esc(report.subject) + '</div>' +
         '</div>' +
         '<div style="background:#f7f8fc;border:1px solid #e8eaf1;border-top:none;border-radius:0 0 20px 20px;padding:28px 24px;">' +
           intro + cards + warnings +
           '<p style="font-size:11px;color:#a7adc0;margin:8px 0 0;text-align:center;line-height:1.6;">' +
-            'Sent by UniScout for your saved universities · summarised from the cited sources only.</p>' +
+            'Sent by UniVersity for your saved universities · summarised from the cited sources only.</p>' +
         '</div>' +
       '</div>' +
     '</div>';
@@ -115,7 +115,7 @@ async function sendReport(report) {
   const mailjet = Mailjet.apiConnect(pub, priv);
   const result = await mailjet.post('send', { version: 'v3.1' }).request({
     Messages: [{
-      From: { Email: from, Name: 'UniScout' },   // must be a validated Mailjet sender
+      From: { Email: from, Name: 'UniVersity' },   // must be a validated Mailjet sender
       To: [{ Email: to }],
       Subject: report.subject,
       TextPart: buildText(report),

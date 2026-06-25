@@ -3457,7 +3457,7 @@ document.getElementById('dlEmptyAddBtn').addEventListener('click', openDlModal);
 document.getElementById('dlAddClose').addEventListener('click', closeDlModal);
 dlAddOverlay.addEventListener('click', function(e) { if (e.target === dlAddOverlay) closeDlModal(); });
 
-// Save an event to Deadlines from a UniScout email link:
+// Save an event to Deadlines from a UniVersity email link:
 //   mainPage.html?dl_add=1&dl_title=..&dl_date=YYYY-MM-DD&dl_uni=..&dl_type=..
 (function handleEmailDeadlineLink() {
     var p = new URLSearchParams(location.search);
@@ -3471,7 +3471,7 @@ dlAddOverlay.addEventListener('click', function(e) { if (e.target === dlAddOverl
 
     var custom = getDlCustom();
     if (!custom.some(function(d) { return d.title === title && d.date === date; })) {
-        custom.push({ id: 'cust_' + Date.now(), uniName: uni, type: type, title: title, date: date, notes: 'Saved from UniScout email' });
+        custom.push({ id: 'cust_' + Date.now(), uniName: uni, type: type, title: title, date: date, notes: 'Saved from UniVersity email' });
         setDlCustom(custom);
     }
     history.replaceState({}, '', location.pathname);
@@ -4110,7 +4110,7 @@ function renderEvalHTML(score, cats, ins, uniName, approved) {
             '</div>' +
             '<div class="ev__score__info">' +
                 '<div class="ev__score__verdict" style="color:' + c + '">' + ins.verdict + '</div>' +
-                '<div class="ev__score__meta">' + (uniName ? uniName + ' · ' : '') + 'UniScout AI Evaluation</div>' +
+                '<div class="ev__score__meta">' + (uniName ? uniName + ' · ' : '') + 'UniVersity AI Evaluation</div>' +
                 approvedPill +
             '</div>' +
         '</div>' +

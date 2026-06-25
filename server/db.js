@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * SQLite data layer for the UniScout Elite subscription system.
+ * SQLite data layer for the UniVersity Elite subscription system.
  *
  * Tables (created/migrated automatically on require):
  *   users          – one row per app user, links them to a Stripe customer

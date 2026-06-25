@@ -27,7 +27,7 @@ function requireEnv() {
 }
 
 async function main() {
-  log.info('UniScout News Agent starting' + (DRY_RUN ? ' [DRY RUN]' : ''));
+  log.info('UniVersity News Agent starting' + (DRY_RUN ? ' [DRY RUN]' : ''));
   requireEnv();
 
   const unis = loadWatchlist();

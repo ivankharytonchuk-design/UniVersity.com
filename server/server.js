@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * UniScout — Stripe Elite subscription backend.
+ * UniVersity — Stripe Elite subscription backend.
  *
  *  • Serves the existing static site from ../design
  *  • POST /api/checkout            → creates a Stripe Checkout Session (subscription)
@@ -89,8 +89,8 @@ async function ensurePrice() {
   }
 
   const product = await stripe.products.create({
-    name: 'UniScout Elite',
-    description: 'UniScout Elite — full access to every destination, advanced tools and Elite status.',
+    name: 'UniVersity Elite',
+    description: 'UniVersity Elite — full access to every destination, advanced tools and Elite status.',
     metadata: { app: 'uniscout', plan: 'elite' },
   });
   const price = await stripe.prices.create({
@@ -266,12 +266,12 @@ app.post('/api/auth/send-code', async (req, res) => {
 
     if (mailer) {
       await mailer.sendMail({
-        from: process.env.SMTP_FROM || ('UniScout <' + process.env.SMTP_USER + '>'),
+        from: process.env.SMTP_FROM || ('UniVersity <' + process.env.SMTP_USER + '>'),
         to: email,
-        subject: 'Your UniScout verification code',
-        text: 'Your UniScout verification code is ' + code + '. It expires in 10 minutes.',
+        subject: 'Your UniVersity verification code',
+        text: 'Your UniVersity verification code is ' + code + '. It expires in 10 minutes.',
         html: '<div style="font-family:Arial,sans-serif;max-width:420px;margin:auto">' +
-              '<h2 style="color:#d97c14">UniScout</h2>' +
+              '<h2 style="color:#d97c14">UniVersity</h2>' +
               '<p>Your verification code is:</p>' +
               '<div style="font-size:30px;font-weight:800;letter-spacing:6px;color:#1a1d23">' + code + '</div>' +
               '<p style="color:#777;font-size:13px">This code expires in 10 minutes. If you didn’t request it, ignore this email.</p></div>',
@@ -466,7 +466,7 @@ app.get('/api/elite/content', requireElite, (_req, res) => {
   res.json({ ok: true, secret: 'This payload is only returned to verified Elite members.' });
 });
 
-// ── UniScout Intelligence (Qdrant retrieval + OpenAI synthesis) ────────────
+// ── UniVersity Intelligence (Qdrant retrieval + OpenAI synthesis) ────────────
 const qdrant = require('./qdrant');
 const synthesize = require('./synthesize');
 const digest = require('./digest');
@@ -639,7 +639,7 @@ app.get('/', (_req, res) => res.sendFile(path.join(__dirname, '..', 'design', 'i
 
 // ── Boot ──────────────────────────────────────────────────────
 app.listen(PORT, async () => {
-  log(`UniScout payment server listening on ${APP_URL}`);
+  log(`UniVersity payment server listening on ${APP_URL}`);
   // Qdrant config: .env wins; otherwise fall back to admin-saved settings.
   try {
     if (!process.env.QDRANT_URL) { const u = getSetting('qdrant_url'); if (u) process.env.QDRANT_URL = u; }

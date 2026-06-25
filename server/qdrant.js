@@ -1,6 +1,6 @@
 'use strict';
 /* ────────────────────────────────────────────────────────────────────────────
-   UniScout Intelligence — Qdrant semantic-search layer (retrieval only)
+   UniVersity Intelligence — Qdrant semantic-search layer (retrieval only)
 
    Source of truth : server/data/comments.json  (real student/resident reviews
                      collected from public review sites — WhatUni, StudentCrowd…)

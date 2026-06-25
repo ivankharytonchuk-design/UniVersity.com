@@ -3,30 +3,36 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>UniScout AI — Real Student & Resident Opinions</title>
+<title>UniVersity AI — Real Student & Resident Opinions</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,400;8..60,500;8..60,600;8..60,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Sora:wght@300;400;500;600;700&family=Fraunces:ital,opsz,wght@1,9..144,400;1,9..144,500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
-    /* ── Claude-inspired warm palette ── */
+    /* ── UniVersity welcome-page palette (bright): white + peach + orange gradient ── */
     :root {
-        --bg:#faf9f5; --sidebar:#f0eee6; --surface:#ffffff; --surface-2:#f5f4ef;
-        --border:#e7e4da; --border-strong:#dcd9cd;
-        --text:#2b2a27; --text-2:#56544e; --text-3:#928f85;
-        --accent:#d97757; --accent-hover:#c8694a; --accent-soft:rgba(217,119,87,.12);
-        --user-bubble:#eceadf;
-        --serif:"Source Serif 4", Georgia, "Times New Roman", serif;
-        --sans:"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --bg:#ffffff; --bg2:#faf8f5; --sidebar:#faf8f5; --surface:#ffffff; --surface-2:#fdfbf8;
+        --border:rgba(13,13,18,.09); --border-strong:rgba(13,13,18,.15);
+        --text:#0d0d12; --text-2:#3a3a45; --text-3:#73737f;
+        --accent:#f59220; --accent2:#d97c14; --accent-deep:#b8610a; --accent-hover:#d97c14;
+        --accent-soft:#fff3e3; --peach:#fff3e3; --peach2:#ffe6c9;
+        --user-bubble:#fff3e3;
+        --grad:linear-gradient(100deg,#f59220 0%,#d97c14 50%,#b8610a 100%);
+        --display:"Syne", sans-serif; --serif:"Fraunces", Georgia, serif;
+        --sans:"Sora", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        --num:"Space Grotesk", ui-monospace, monospace;
         --sb-w:280px;
     }
     [data-theme="dark"] {
-        --bg:#262624; --sidebar:#1f1e1d; --surface:#30302e; --surface-2:#2a2a28;
-        --border:#3a3936; --border-strong:#46443f;
-        --text:#f3f1ea; --text-2:#c6c3ba; --text-3:#8f8c82;
-        --accent:#e08a6b; --accent-hover:#e89c80; --accent-soft:rgba(224,138,107,.16);
-        --user-bubble:#393833;
+        --bg:#141319; --bg2:#100f15; --sidebar:#100f15; --surface:#1c1b24; --surface-2:#191820;
+        --border:rgba(255,255,255,.09); --border-strong:rgba(255,255,255,.16);
+        --text:#f4f2ee; --text-2:#c3c1cb; --text-3:#8b8a96;
+        --accent:#f59220; --accent2:#f5a93f; --accent-deep:#d97c14; --accent-hover:#f5a93f;
+        --accent-soft:rgba(245,146,32,.14); --peach:rgba(245,146,32,.14); --peach2:rgba(245,146,32,.2);
+        --user-bubble:#262430;
     }
+    .grad-text { background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
+    .accent-serif { font-family:var(--serif); font-style:italic; font-weight:400; }
     * { box-sizing:border-box; margin:0; padding:0; }
     html, body { height:100%; }
     body {
@@ -43,7 +49,7 @@
         transition:margin-left .26s ease;
     }
     .sidebar__top { padding:16px 14px 10px; }
-    .sidebar__logo { display:flex; align-items:center; gap:9px; text-decoration:none; color:var(--text); font-weight:700; font-size:15px; padding:4px 6px 14px; }
+    .sidebar__logo { display:flex; align-items:center; gap:9px; text-decoration:none; color:var(--text); font-family:var(--display); font-weight:800; letter-spacing:-.01em; font-size:17px; padding:4px 6px 14px; }
     .sidebar__logo img { width:26px; height:26px; }
     .sidebar__logo .ar__pill { font-family:var(--sans); font-size:9.5px; font-weight:700; color:var(--accent); background:var(--accent-soft); padding:3px 8px; border-radius:999px; letter-spacing:.3px; }
     .sidebar__new {
@@ -85,7 +91,7 @@
         border-bottom:1px solid transparent; background:var(--bg);
     }
     .topbar__menu { display:none; }
-    .topbar__title { font-family:var(--serif); font-size:16px; font-weight:600; color:var(--text); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+    .topbar__title { font-family:var(--display); font-size:16px; font-weight:700; letter-spacing:-.01em; color:var(--text); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
     .icon-btn {
         width:36px; height:36px; border-radius:9px; border:1px solid var(--border);
         background:var(--surface); color:var(--text-2); cursor:pointer;
@@ -96,24 +102,50 @@
     .chat { flex:1; overflow-y:auto; }
     .thread { max-width:760px; margin:0 auto; padding:26px 24px 40px; display:flex; flex-direction:column; gap:26px; }
 
-    /* Welcome / empty state */
-    .welcome { text-align:center; padding:9vh 0 10px; }
-    .welcome__icon {
-        width:60px; height:60px; border-radius:17px; margin:0 auto 22px;
-        background:linear-gradient(135deg, var(--accent), #e6a07f);
-        display:flex; align-items:center; justify-content:center; color:#fff; font-size:25px;
-        box-shadow:0 10px 26px -8px rgba(217,119,87,.55);
+    /* Welcome / empty state — elegant, minimal, modern (echoes index.html) */
+    .chat--welcome {
+        background:
+            radial-gradient(120% 80% at 82% -10%, var(--peach) 0%, transparent 55%),
+            radial-gradient(80% 60% at -8% 8%, #fef6ee 0%, transparent 52%), var(--bg);
     }
-    .welcome h1 { font-family:var(--serif); font-size:32px; font-weight:600; letter-spacing:-.4px; margin-bottom:12px; }
-    .welcome p { font-family:var(--serif); font-size:17px; color:var(--text-2); max-width:520px; margin:0 auto 30px; line-height:1.7; }
-    .chips { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; max-width:640px; margin:0 auto; }
+    [data-theme="dark"] .chat--welcome {
+        background:
+            radial-gradient(120% 80% at 82% -10%, rgba(245,146,32,.12) 0%, transparent 55%),
+            radial-gradient(80% 60% at -8% 8%, rgba(245,146,32,.08) 0%, transparent 52%), var(--bg);
+    }
+    .welcome { position:relative; text-align:center; padding:11vh 0 10px; overflow:hidden; }
+    .welcome__orb { position:absolute; border-radius:50%; filter:blur(52px); opacity:.5; pointer-events:none; z-index:0; }
+    .welcome__orb--1 { width:340px; height:340px; background:radial-gradient(circle,#ffd29e,transparent 70%); top:-110px; right:-40px; }
+    .welcome__orb--2 { width:280px; height:280px; background:radial-gradient(circle,#ffe0bd,transparent 70%); bottom:-90px; left:-60px; }
+    .welcome > * { position:relative; z-index:1; }
+    .welcome__eyebrow {
+        display:inline-flex; align-items:center; gap:9px; margin:0 auto 22px;
+        background:var(--surface); border:1px solid var(--border); border-radius:100px;
+        padding:6px 15px 6px 7px; font-size:12.5px; font-weight:500; color:var(--text-2);
+        box-shadow:0 8px 24px -16px rgba(20,18,40,.4);
+    }
+    .welcome__eyebrow b {
+        display:inline-flex; align-items:center; gap:6px; background:var(--peach); color:var(--accent-deep);
+        font-weight:700; font-size:11px; padding:3px 10px; border-radius:100px;
+    }
+    [data-theme="dark"] .welcome__eyebrow b { color:var(--accent2); }
+    .welcome h1 {
+        font-family:var(--display); font-size:clamp(30px,5vw,46px); font-weight:800;
+        letter-spacing:-.02em; line-height:1.05; margin-bottom:16px;
+    }
+    .welcome p {
+        font-family:var(--sans); font-weight:300; font-size:clamp(15px,2vw,18px);
+        color:var(--text-3); max-width:500px; margin:0 auto 34px; line-height:1.6;
+    }
+    .chips { display:flex; flex-wrap:wrap; gap:11px; justify-content:center; max-width:660px; margin:0 auto; }
     .chip {
         text-align:left; cursor:pointer; font-family:var(--sans);
-        background:var(--surface); border:1px solid var(--border); border-radius:12px;
-        padding:12px 15px; font-size:12.5px; color:var(--text-2); font-weight:500;
-        display:flex; align-items:center; gap:10px; transition:.15s; max-width:300px;
+        background:var(--surface); border:1px solid var(--border); border-radius:100px;
+        padding:11px 18px; font-size:13px; color:var(--text-2); font-weight:500;
+        display:flex; align-items:center; gap:9px; transition:transform .25s, border-color .25s, box-shadow .25s;
+        box-shadow:0 8px 26px -20px rgba(20,18,40,.5);
     }
-    .chip:hover { border-color:var(--accent); color:var(--text); transform:translateY(-1px); }
+    .chip:hover { border-color:var(--accent); color:var(--text); transform:translateY(-3px); box-shadow:0 14px 30px -18px rgba(245,146,32,.6); }
     .chip i { color:var(--accent); font-size:13px; flex-shrink:0; }
 
     /* Messages */
@@ -123,19 +155,19 @@
         width:30px; height:30px; border-radius:8px; flex-shrink:0; margin-top:2px;
         display:flex; align-items:center; justify-content:center; font-size:13px; color:#fff;
     }
-    .msg--ai .msg__av { background:linear-gradient(135deg, var(--accent), #e6a07f); }
+    .msg--ai .msg__av { background:var(--grad); }
     .msg__av--logo { background:transparent !important; }
     .msg__av--logo img { width:100%; height:100%; object-fit:contain; border-radius:8px; }
     .msg--user .msg__av { background:var(--surface-2); color:var(--text-2); border:1px solid var(--border); }
     .msg__main { flex:1; min-width:0; }
-    .msg__role { font-size:11.5px; font-weight:700; color:var(--text-3); margin-bottom:5px; letter-spacing:.2px; }
+    .msg__role { font-family:var(--display); font-size:11px; font-weight:700; color:var(--text-3); margin-bottom:5px; letter-spacing:.3px; }
 
-    /* AI prose in serif — the "Claude" reading feel */
-    .msg--ai .msg__body { font-family:var(--serif); font-size:16px; line-height:1.75; color:var(--text); }
+    /* AI prose — clean modern sans (Sora) */
+    .msg--ai .msg__body { font-family:var(--sans); font-size:15px; line-height:1.72; color:var(--text-2); }
     .msg--ai .msg__body p { margin:11px 0; }
     .msg--ai .msg__body p:first-child { margin-top:0; }
     .msg--ai .msg__body p:last-child { margin-bottom:0; }
-    .msg--ai .msg__body h3 { font-size:17px; font-weight:600; margin:16px 0 7px; }
+    .msg--ai .msg__body h3 { font-family:var(--display); font-size:16px; font-weight:700; color:var(--text); margin:16px 0 7px; }
     .msg--ai .msg__body ul { margin:9px 0; padding-left:22px; }
     .msg--ai .msg__body li { margin:5px 0; }
     .msg--ai .msg__body strong { font-weight:700; }
@@ -166,31 +198,31 @@
     .typing span:nth-child(2){ animation-delay:.2s; } .typing span:nth-child(3){ animation-delay:.4s; }
     @keyframes blink { 0%,60%,100%{ opacity:.3; transform:translateY(0);} 30%{ opacity:1; transform:translateY(-3px);} }
 
-    .warn { font-family:var(--sans); font-size:13.5px; color:#9a5b2c; background:rgba(217,119,87,.1); border:1px solid rgba(217,119,87,.28); padding:11px 14px; border-radius:12px; line-height:1.6; }
-    [data-theme="dark"] .warn { color:#e0a888; }
+    .warn { font-family:var(--sans); font-size:13.5px; color:var(--accent-deep); background:var(--peach); border:1px solid rgba(245,146,32,.28); padding:11px 14px; border-radius:12px; line-height:1.6; }
+    [data-theme="dark"] .warn { color:#f5b878; }
 
     /* Composer */
     .composer { padding:10px 24px 18px; background:linear-gradient(to top, var(--bg) 70%, transparent); }
     .composer__inner { max-width:760px; margin:0 auto; }
     .quota { font-size:11.5px; font-weight:600; color:var(--text-2); display:flex; align-items:center; gap:7px; margin:0 4px 8px; }
     .quota i { color:var(--accent); }
-    .quota--out { color:#9a5b2c; } .quota--out a { color:var(--accent); font-weight:700; }
+    .quota--out { color:var(--accent-deep); } .quota--out a { color:var(--accent); font-weight:700; }
     .quota--elite { color:#b8860b; } .quota--elite i { color:#e0a02a; }
     .box {
         display:flex; align-items:flex-end; gap:9px; background:var(--surface);
         border:1.5px solid var(--border-strong); border-radius:20px; padding:9px 9px 9px 18px;
         transition:border-color .15s, box-shadow .15s; box-shadow:0 2px 16px -10px rgba(0,0,0,.3);
     }
-    .box:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+    .box:focus-within { border-color:var(--accent); box-shadow:0 0 0 3px rgba(245,146,32,.16); }
     .input { flex:1; border:none; outline:none; background:transparent; resize:none; font-family:var(--sans); font-size:15px; color:var(--text); line-height:1.5; max-height:170px; padding:8px 0; }
     .input::placeholder { color:var(--text-3); }
-    .send { width:38px; height:38px; border-radius:13px; border:none; flex-shrink:0; cursor:pointer; background:var(--accent); color:#fff; font-size:15px; display:flex; align-items:center; justify-content:center; transition:.15s; }
-    .send:disabled { opacity:.4; cursor:not-allowed; }
-    .send:not(:disabled):hover { background:var(--accent-hover); }
+    .send { width:40px; height:40px; border-radius:14px; border:none; flex-shrink:0; cursor:pointer; background:var(--grad); color:#fff; font-size:15px; display:flex; align-items:center; justify-content:center; transition:transform .18s, box-shadow .18s; box-shadow:0 10px 22px -10px rgba(245,146,32,.7); }
+    .send:disabled { opacity:.4; cursor:not-allowed; box-shadow:none; }
+    .send:not(:disabled):hover { transform:translateY(-2px); box-shadow:0 14px 26px -10px rgba(245,146,32,.85); }
     .disclaimer { max-width:760px; margin:9px auto 0; font-size:10.5px; color:var(--text-3); text-align:center; }
 
     /* Upgrade card */
-    .upgrade { background:var(--accent-soft); border:1px solid rgba(217,119,87,.3); border-radius:14px; padding:16px 18px; font-family:var(--sans); }
+    .upgrade { background:var(--accent-soft); border:1px solid rgba(245,146,32,.3); border-radius:14px; padding:16px 18px; font-family:var(--sans); }
     .upgrade h3 { font-size:15px; font-weight:700; margin:0 0 6px; display:flex; align-items:center; gap:8px; }
     .upgrade h3 i { color:#e0a02a; }
     .upgrade p { font-size:13px; color:var(--text-2); line-height:1.6; margin:0 0 13px; }
@@ -216,8 +248,8 @@
     <aside class="sidebar" id="sidebar">
         <div class="sidebar__top">
             <a href="mainPage.html" class="sidebar__logo">
-                <img src="images/logo2.png" alt="UniScout">
-                <span>UniScout</span>
+                <img src="images/logo2.png" alt="UniVersity">
+                <span>UniVersity</span>
                 <span class="ar__pill">AI</span>
             </a>
             <button class="sidebar__new" id="newChatBtn"><i class="fa-solid fa-plus"></i> New chat</button>
@@ -404,7 +436,8 @@
     /* ── Render the active conversation ── */
     function renderThread() {
         var c = current();
-        if (!c || !c.messages.length) { renderWelcome(); return; }
+        if (!c || !c.messages.length) { chat.classList.add('chat--welcome'); renderWelcome(); return; }
+        chat.classList.remove('chat--welcome');
         thread.innerHTML = '';
         c.messages.forEach(function (m, i) { thread.appendChild(messageEl(m, i)); });
         scrollDown(true);
@@ -412,8 +445,9 @@
     function renderWelcome() {
         thread.innerHTML =
           '<div class="welcome">' +
-            '<div class="welcome__icon"><i class="fa-solid fa-comments"></i></div>' +
-            '<h1>What do real people say?</h1>' +
+            '<span class="welcome__orb welcome__orb--1"></span><span class="welcome__orb welcome__orb--2"></span>' +
+            '<span class="welcome__eyebrow"><b><i class="fa-solid fa-star"></i> AI</b> Real student &amp; resident opinions</span>' +
+            '<h1>What do <span class="grad-text">real people</span> <span class="accent-serif">say?</span></h1>' +
             '<p>Ask about anything related to universities and cities and get real people opinion.</p>' +
             '<div class="chips">' +
               chip('fa-graduation-cap', 'What do students really think about Oxford?') +
@@ -450,7 +484,7 @@
                           : (m.upgrade ? upgradeHTML() : mdToHtml(m.content)));
             el.innerHTML =
               '<div class="msg__av msg__av--logo"><img src="images/logo2.png" alt="AI"></div>' +
-              '<div class="msg__main"><div class="msg__role">UniScout AI</div><div class="msg__body">' + inner + '</div></div>';
+              '<div class="msg__main"><div class="msg__role">UniVersity AI</div><div class="msg__body">' + inner + '</div></div>';
         }
         return el;
     }
@@ -560,7 +594,7 @@
             finishTurn();
         })
         .catch(function (err) {
-            aiMsg.warn = true; aiMsg.content = 'Could not reach UniScout AI. Make sure the server is running. (' + String(err) + ')';
+            aiMsg.warn = true; aiMsg.content = 'Could not reach UniVersity AI. Make sure the server is running. (' + String(err) + ')';
             delete aiMsg.pending; finishTurn();
         });
     }
@@ -583,12 +617,37 @@
     document.getElementById('sideOverlay').addEventListener('click', closeSidebarMobile);
 
     /* ── Boot ── */
+    // After this long away, returning to the page opens a FRESH chat while the
+    // previous conversation stays saved in the sidebar history.
+    var IDLE_MS = 30 * 60 * 1000;
+    function resumeOrFresh() {
+        if (convos.length) {
+            var latest = convos[0];
+            var recent = latest.updatedAt && (Date.now() - latest.updatedAt) < IDLE_MS;
+            if (recent && latest.messages && latest.messages.length) {
+                currentId = latest.id; chatTitle.textContent = latest.title; return;
+            }
+        }
+        currentId = null; chatTitle.textContent = 'New chat';   // old chats remain in history
+    }
+
     loadConvos();
+    resumeOrFresh();
     renderSidebar();
-    if (convos.length) { currentId = convos[0].id; chatTitle.textContent = convos[0].title; }
     renderThread();
     refreshElite();
     updateQuotaUI();
+
+    // Left the page and came back later → auto-open a new chat (without losing the old one).
+    var hiddenAt = 0;
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) { hiddenAt = Date.now(); return; }
+        if (busy || !hiddenAt) return;
+        var c = current();
+        if ((Date.now() - hiddenAt) >= IDLE_MS && c && c.messages && c.messages.length) {
+            newConversation();
+        }
+    });
 }());
 </script>
 </body>

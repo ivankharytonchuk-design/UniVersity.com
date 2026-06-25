@@ -310,7 +310,7 @@ signupForm.addEventListener('submit', function (e) {
     DB.add(newUser);
 
     Session.set(newUser, false);
-    showToast('Welcome to UniScout, ' + newUser.username + '!');
+    showToast('Welcome to UniVersity, ' + newUser.username + '!');
     setTimeout(function () { window.location.href = postAuthDest(); }, 1000);
 });
 
@@ -339,7 +339,7 @@ forgotSubmit.addEventListener('click', function () {
     if (user) {
         var token = Math.random().toString(36).slice(2) + Date.now().toString(36);
         localStorage.setItem('us_reset_' + token, JSON.stringify({ userId: user.id, expires: Date.now() + 3600000 }));
-        console.info('[UniScout] Password reset token (demo):', token);
+        console.info('[UniVersity] Password reset token (demo):', token);
     }
 });
 
@@ -378,7 +378,7 @@ function sendSocialCode() {
     socialCodeExpected = String(Math.floor(100000 + Math.random() * 900000));
     // No email backend in this build, so the code is revealed for testing.
     showToast('Verification code sent: ' + socialCodeExpected);
-    console.info('[UniScout] Verification code (demo, would be emailed):', socialCodeExpected);
+    console.info('[UniVersity] Verification code (demo, would be emailed):', socialCodeExpected);
 }
 
 document.getElementById('socialClose').addEventListener('click', closeSocialAuth);
