@@ -1,10 +1,11 @@
 [
   {
     "email": "ivan.kharytonchuk10@gmail.com",
+    "country": "gb",
     "universities": [
-      "Harvard University",
       "University of Oxford",
-      "Bocconi University"
+      "University of Cambridge",
+      "Imperial College London"
     ]
   }
 ]
