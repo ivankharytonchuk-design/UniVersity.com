@@ -14,6 +14,20 @@ services:
         value: 4242
       - key: DIGEST_HOUR
         value: 8
+      # ── REQUIRED to boot: the server exits on start without STRIPE_SECRET_KEY ──
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      # Public URL of this Render service (used for Stripe redirect URLs).
+      - key: APP_URL
+        sync: false
+      # Accounts that are always Elite (comma-separated emails/usernames). Add your
+      # account here so you receive the Elite digest without a Stripe subscription.
+      - key: ELITE_ACCOUNTS
+        sync: false
       # ── secrets: set these in the Render dashboard ──
       - key: SMTP_HOST
         value: smtp.gmail.com
