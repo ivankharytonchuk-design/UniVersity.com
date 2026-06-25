@@ -23,12 +23,10 @@ jobs:
       - name: Send the digest
         run: cd server && node digest-cron.js
         env:
-          # Preferred provider: Resend. Set RESEND_API_KEY in repo Settings →
-          # Secrets and variables → Actions. Without it, NOTHING is sent.
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          RESEND_FROM: ${{ secrets.RESEND_FROM || 'UniScout <onboarding@resend.dev>' }}
-          # Fallback provider: SMTP (e.g. a Gmail app password). Used only if
-          # RESEND_API_KEY is absent. Safe to leave these secrets unset.
+          # Provider: Gmail SMTP. The script prefers Resend whenever RESEND_API_KEY
+          # is set, so we intentionally DO NOT pass it here — that forces the SMTP
+          # path below. (Re-enable the Resend line later if you verify a domain.)
+          # RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
           SMTP_PORT: ${{ secrets.SMTP_PORT }}
           SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
