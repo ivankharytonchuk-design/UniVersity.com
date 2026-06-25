@@ -565,11 +565,17 @@ app.all('/api/digest/cron', async (req, res) => {
   const want = process.env.DIGEST_CRON_TOKEN;
   const got = (req.query && req.query.token) || req.get('x-cron-token');
   if (!want || got !== want) return res.status(403).json({ error: 'forbidden' });
-  try {
-    digest.seedFromTargetsFile();
-    const results = await digest.runDigest(mailer, synthesize);
-    res.json({ ok: true, mailer: !!mailer, count: results.length, results: results.map(r => ({ to: r.email, sent: !!r.sent, headlines: r.headlines })) });
-  } catch (e) { res.status(500).json({ error: 'cron_failed', message: e.message }); }
+  // Respond immediately, then send in the background. A full run (news lookups for
+  // every Elite subscriber) can take minutes — longer than a free host's HTTP
+  // request timeout — so we must not make the cron pinger wait for it.
+  res.json({ ok: true, started: true, mailer: !!mailer });
+  (async () => {
+    try {
+      digest.seedFromTargetsFile();
+      const results = await digest.runDigest(mailer, synthesize);
+      log('Cron digest sent to ' + results.filter(r => r.sent).length + '/' + results.length + ' subscribers.');
+    } catch (e) { errlog('Cron digest failed:', e.message); }
+  })();
 });
 
 // Schedule the digest to run once a day at DIGEST_HOUR (local time, default 08:00).

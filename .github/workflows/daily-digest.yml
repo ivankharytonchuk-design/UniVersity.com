@@ -1,8 +1,16 @@
 name: Daily university digest
 
-# Runs every day at 09:00 UTC, and can also be triggered by hand from the
-# Actions tab (workflow_dispatch → "Run workflow"). It sends the news email
-# about the universities listed in server/digest-targets.json.
+# Pings the DEPLOYED server once a day. The server holds the live list of Elite
+# subscribers (each with their own saved universities) and sends every one of
+# them a personalised email. Can also be triggered by hand from the Actions tab.
+#
+# Why a ping (not `node digest-cron.js`)? That script runs against a fresh, empty
+# database and only knows the static digest-targets.json — it cannot reach your
+# real Elite users. Only the deployed server has that data.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   DIGEST_CRON_URL    e.g. https://uniscout.onrender.com/api/digest/cron
+#   DIGEST_CRON_TOKEN  the value Render generated for DIGEST_CRON_TOKEN
 on:
   schedule:
     # 09:00 UTC = 11:00 in Madrid (summer/CEST). In winter it lands at 10:00 local.
@@ -11,26 +19,20 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  send:
+  trigger:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: "22"
-      - name: Install server deps
-        run: cd server && npm install --omit=dev
-      - name: Send the digest
-        run: cd server && node digest-cron.js
+      - name: Trigger the digest on the server
         env:
-          # Provider: Gmail SMTP. The script prefers Resend whenever RESEND_API_KEY
-          # is set, so we intentionally DO NOT pass it here — that forces the SMTP
-          # path below. (Re-enable the Resend line later if you verify a domain.)
-          # RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          SMTP_HOST: ${{ secrets.SMTP_HOST }}
-          SMTP_PORT: ${{ secrets.SMTP_PORT }}
-          SMTP_SECURE: ${{ secrets.SMTP_SECURE }}
-          SMTP_USER: ${{ secrets.SMTP_USER }}
-          SMTP_PASS: ${{ secrets.SMTP_PASS }}
-          SMTP_FROM: ${{ secrets.SMTP_FROM }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DIGEST_CRON_URL: ${{ secrets.DIGEST_CRON_URL }}
+          DIGEST_CRON_TOKEN: ${{ secrets.DIGEST_CRON_TOKEN }}
+        run: |
+          if [ -z "$DIGEST_CRON_URL" ] || [ -z "$DIGEST_CRON_TOKEN" ]; then
+            echo "::error::Set DIGEST_CRON_URL and DIGEST_CRON_TOKEN repo secrets."
+            exit 1
+          fi
+          # --max-time generous so a sleeping free host has time to wake. The
+          # server replies immediately (202-style) and sends in the background.
+          curl -fsS --max-time 120 "${DIGEST_CRON_URL}?token=${DIGEST_CRON_TOKEN}"
+          echo
+          echo "Digest triggered."

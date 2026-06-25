@@ -41,7 +41,14 @@ var SAVED_KEY      = 'us_saved_'     + user.id;
 var FORM_APPS_KEY  = 'us_form_apps_' + user.id;
 function getSaved()    { try { return JSON.parse(localStorage.getItem(SAVED_KEY)     || '[]'); } catch(e) { return []; } }
 function getFormApps() { try { return JSON.parse(localStorage.getItem(FORM_APPS_KEY) || '[]'); } catch(e) { return []; } }
-function setSaved(d)    { localStorage.setItem(SAVED_KEY,     JSON.stringify(d)); }
+function setSaved(d)    { localStorage.setItem(SAVED_KEY,     JSON.stringify(d)); scheduleDigestSync(); }
+// Push the updated favourites to the server (debounced) so an Elite user's daily
+// digest always reflects their current saved universities. Safe no-op pre-login.
+var _digestSyncT = null;
+function scheduleDigestSync() {
+    clearTimeout(_digestSyncT);
+    _digestSyncT = setTimeout(function () { try { syncDigestSubscription(); } catch (e) {} }, 1500);
+}
 function setFormApps(d) { localStorage.setItem(FORM_APPS_KEY, JSON.stringify(d)); }
 
 var TS_COST = { 1:700, 2:1200, 3:5000, 4:15000, 5:25000 };
@@ -125,6 +132,10 @@ function showTab(tab) {
     if (_main) _main.style.display = (tab === 'gradebook') ? 'none' : '';
     if (tab === 'explore' && typeof applyExploreMatcherLayout === 'function') applyExploreMatcherLayout();
     if (tab === 'gradebook' && typeof window.renderGradebook === 'function') window.renderGradebook();
+    // Re-render the Overview's academic widget every time the tab is shown so it
+    // never displays a stale university (it shares its logic with the Gradebook,
+    // which the user confirmed shows the correct uni).
+    if (tab === 'overview' && typeof window.renderAcademicWidget === 'function') window.renderAcademicWidget();
 }
 
 document.querySelectorAll('.mp__nav__btn[data-tab]').forEach(function(btn) {
@@ -2796,6 +2807,50 @@ function buildEmptyCountry(code) {
     };
 }
 
+/* ── Cross-country university registry ───────────────────────────────────────
+   UNI only ever holds the currently-loaded country, but the Gradebook stores
+   target universities by id and they may belong to other countries (e.g. Oxford
+   while viewing Spain). Without this, such a uni couldn't be resolved and a
+   different country's uni was shown in its place. We remember a light record of
+   every uni we load — keyed by id, persisted — so lookups work across countries
+   and across sessions. */
+var UNI_REGISTRY_KEY = 'us_uni_registry';
+function registerUnis(list) {
+    if (!list || !list.length) return;
+    var reg;
+    try { reg = JSON.parse(localStorage.getItem(UNI_REGISTRY_KEY) || '{}'); } catch (e) { reg = {}; }
+    list.forEach(function (u) {
+        if (!u || !u.id) return;
+        reg[u.id] = { id: u.id, name: u.name, abbr: u.abbr, color: u.color, diff: u.diff, dl: u.dl, fields: u.fields };
+    });
+    try { localStorage.setItem(UNI_REGISTRY_KEY, JSON.stringify(reg)); } catch (e) {}
+}
+window.uniFromRegistry = function (id) {
+    try { return (JSON.parse(localStorage.getItem(UNI_REGISTRY_KEY) || '{}'))[id] || null; } catch (e) { return null; }
+};
+
+/* Warm the registry from EVERY country in the background, so a Gradebook target
+   from any country (e.g. Oxford while viewing Spain) resolves immediately without
+   the user having to visit that country first. Deferred so it never blocks the
+   initial render; the browser caches each file so the cost is one-time. */
+(function warmUniRegistry() {
+    var CODES = ['be','ch','de','dk','es','fi','fr','gb','ie','it','nl','pt','se','ua','us'];
+    setTimeout(function () {
+        var done = 0;
+        CODES.forEach(function (code) {
+            fetch('data/' + code + '.json')
+                .then(function (r) { return r.json(); })
+                .then(function (data) { if (data && data.universities) registerUnis(data.universities); })
+                .catch(function () {})
+                .then(function () {
+                    if (++done === CODES.length && typeof window.renderAcademicWidget === 'function') {
+                        window.renderAcademicWidget();   // refresh once every uni is known
+                    }
+                });
+        });
+    }, 1500);
+})();
+
 function applyCountryData(code, data, gen) {
         if (gen !== _loadCountryGen) return;
         localStorage.setItem(COUNTRY_KEY, code);
@@ -2804,6 +2859,7 @@ function applyCountryData(code, data, gen) {
         if (typeof window.fyRefresh === 'function') window.fyRefresh();   // update matcher country label/destinations
 
         UNI = data.universities.concat(getCustomUnisForCountry(code));
+        registerUnis(UNI);   // remember these unis so cross-country lookups (e.g. Gradebook targets) resolve
 
         var flagWrap = document.getElementById('headerFlagWrap');
         var flagEl   = document.getElementById('headerFlag');
@@ -2963,6 +3019,7 @@ function applyCountryData(code, data, gen) {
         fetchCountryWeather(code);
         renderUpdatesFeed();
         updateDshWidgets();
+        if (typeof window.renderAcademicWidget === 'function') window.renderAcademicWidget();
 
         updateSliderRange();
         renderBudgetMatches();
@@ -5445,7 +5502,10 @@ function setDigestEnabled(on) { localStorage.setItem(DIGEST_ON_KEY, on ? '1' : '
 function syncDigestSubscription() {
     try {
         if (!user || !user.email) return;
-        if (!digestEnabled()) {
+        // The daily news digest is an Elite perk: only Elite users (who haven't
+        // turned it off) stay subscribed — everyone else is ensured unsubscribed.
+        var elite = (typeof eliteState !== 'undefined' && eliteState && !!eliteState.elite);
+        if (!elite || !digestEnabled()) {
             payFetch('/api/digest/unsubscribe', {
                 method: 'POST', headers: { 'content-type': 'application/json' },
                 body: JSON.stringify({ email: user.email })
@@ -5458,9 +5518,10 @@ function syncDigestSubscription() {
             var u = allUnis.find(function (x) { return x.id === id; });
             return u ? (u.name || u.title) : null;
         }).filter(Boolean);
+        var country = (typeof currentCountryCode !== 'undefined' && currentCountryCode) ? currentCountryCode : null;
         payFetch('/api/digest/subscribe', {
             method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ email: user.email, userId: user.id, universities: names })
+            body: JSON.stringify({ email: user.email, userId: user.id, universities: names, country: country })
         }).catch(function () {});
     } catch (e) {}
 }
@@ -5535,6 +5596,8 @@ function refreshEliteStatus(cb) {
                 cancelAtPeriodEnd: !!d.cancelAtPeriodEnd, cardBrand: d.cardBrand, cardLast4: d.cardLast4
             };
             applyEliteUI();
+            // Elite status is now known — (un)subscribe to the daily digest accordingly.
+            try { syncDigestSubscription(); } catch (e) {}
             if (cb) cb(eliteState);
         })
         .catch(function () { /* backend offline — keep the cached cosmetic state */ if (cb) cb(null); });
@@ -6735,7 +6798,14 @@ function applyExploreMatcherLayout() {
     function readinessPct(u) { var o = overallAvg(); return o == null ? null : readinessForPct(toPct(o), u); }
     // The university the student is aiming for (top dream, else top target).
     function aimUni() { var id = GB.unis.dream[0] || GB.unis.target[0]; return id ? findUni(id) : null; }
-    function findUni(id) { return (typeof UNI !== 'undefined') ? UNI.find(function (u) { return u.id === id; }) : null; }
+    function findUni(id) {
+        var u = (typeof UNI !== 'undefined') ? UNI.find(function (x) { return x.id === id; }) : null;
+        if (u) return u;
+        // Not in the current country — fall back to the cross-country registry so a
+        // dream/target uni from another country (e.g. Oxford while viewing Spain)
+        // still resolves instead of showing a wrong university.
+        return (typeof window.uniFromRegistry === 'function') ? window.uniFromRegistry(id) : null;
+    }
     function allTargetIds() { return GB.unis.dream.concat(GB.unis.target, GB.unis.safety); }
 
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
