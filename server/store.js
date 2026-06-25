@@ -70,6 +70,10 @@ async function register({ email, username, password }) {
   if (!password || String(password).length < 6) throw new Error('weak_password');
   const exists = await pool.query('SELECT id FROM accounts WHERE email=$1', [email]);
   if (exists.rows.length) throw new Error('email_taken');
+  if (username) {
+    const u = await pool.query('SELECT id FROM accounts WHERE lower(username)=lower($1)', [username]);
+    if (u.rows.length) throw new Error('username_taken');
+  }
   const id = newId();
   const hash = await bcrypt.hash(String(password), 10);
   await pool.query('INSERT INTO accounts (id,email,username,password_hash) VALUES ($1,$2,$3,$4)',
@@ -78,9 +82,9 @@ async function register({ email, username, password }) {
   return { token, user: { id, email, username: username || null } };
 }
 
-async function login({ email, password }) {
-  email = norm(email);
-  const r = await pool.query('SELECT * FROM accounts WHERE email=$1', [email]);
+async function login({ email, identifier, password }) {
+  const id = norm(identifier || email);
+  const r = await pool.query('SELECT * FROM accounts WHERE email=$1 OR lower(username)=$1', [id]);
   const acc = r.rows[0];
   if (!acc) throw new Error('no_such_user');
   const ok = await bcrypt.compare(String(password || ''), acc.password_hash);

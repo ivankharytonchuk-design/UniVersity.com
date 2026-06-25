@@ -33,6 +33,7 @@ try { localStorage.setItem('us_lastseen_' + user.id, Date.now()); } catch (e) { 
 document.getElementById('mpName').textContent = user.username;
 document.getElementById('heroName').textContent = user.username;
 document.getElementById('mpSignout').addEventListener('click', function () {
+    if (window.UserSync) UserSync.logout();   // end the server session + stop syncing
     localStorage.removeItem(SESSION_KEY); sessionStorage.removeItem(SESSION_KEY);
     window.location.href = 'log-in.html';
 });

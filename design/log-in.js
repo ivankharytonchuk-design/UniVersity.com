@@ -259,23 +259,50 @@ signinForm.addEventListener('submit', function (e) {
 
     setLoading(siSubmit, true);
 
-    var user = DB.findByIdentifier(id);
-    if (!user) {
-        markErr(si_id, si_id_err, 'No account found with this email or username');
-        setLoading(siSubmit, false);
-        return;
-    }
-    var hash = hashPassword(pw);
-    if (hash !== user.passwordHash) {
-        markErr(si_pw, si_pw_err, 'Incorrect password');
-        setLoading(siSubmit, false);
-        return;
-    }
-
-    Session.set(user, si_remember.checked);
-    showToast('Welcome back, ' + user.username + '!');
-    setTimeout(function () { window.location.href = postAuthDest(); }, 1000);
+    // Server-first. Falls back to the legacy local accounts if the server is
+    // unreachable / accounts are disabled, and migrates a legacy account up.
+    if (window.UserSync) {
+        UserSync.login(id, pw).then(function (res) {
+            if (res.ok) { onAuthed(res.data, si_remember.checked, 'Welcome back, '); return; }
+            if (res.status === 401) { return localSignin(id, pw, true); }
+            if (res.status === 503) { return localSignin(id, pw, false); }
+            markErr(si_id, si_id_err, (res.data && res.data.error) || 'Login failed'); setLoading(siSubmit, false);
+        }).catch(function () { localSignin(id, pw, false); });
+    } else { localSignin(id, pw, false); }
 });
+
+// Legacy local sign-in. When `migrate` and the server is up, create the matching
+// server account once so the user becomes server-backed (and their data syncs up).
+function localSignin(id, pw, migrate) {
+    var user = DB.findByIdentifier(id);
+    if (!user) { markErr(si_id, si_id_err, 'No account found with this email or username'); setLoading(siSubmit, false); return; }
+    if (hashPassword(pw) !== user.passwordHash) { markErr(si_pw, si_pw_err, 'Incorrect password'); setLoading(siSubmit, false); return; }
+    if (migrate && window.UserSync) {
+        UserSync.register(user.email, user.username, pw).then(function (res) {
+            if (res.ok) return res.data;
+            return UserSync.login(user.email, pw).then(function (r2) { return r2.ok ? r2.data : null; });
+        }).then(function (d) {
+            onAuthed(d && d.token ? d : { user: user }, si_remember.checked, 'Welcome back, ');
+        }).catch(function () { onAuthed({ user: user }, si_remember.checked, 'Welcome back, '); });
+    } else {
+        onAuthed({ user: user }, si_remember.checked, 'Welcome back, ');
+    }
+}
+
+// Finalise auth: set the session token (+ pull/merge the account's data), store
+// the session and redirect.
+function onAuthed(data, remember, greet) {
+    var user = data.user || data;
+    var done = function () {
+        Session.set(user, remember);
+        showToast(greet + (user.username || '') + '!');
+        setTimeout(function () { window.location.href = postAuthDest(); }, 900);
+    };
+    if (data.token && window.UserSync) {
+        UserSync.setToken(data.token);
+        UserSync.mergeOnLogin().then(done, done);
+    } else { done(); }
+}
 
 signupForm.addEventListener('submit', function (e) {
     e.preventDefault();
@@ -288,31 +315,35 @@ signupForm.addEventListener('submit', function (e) {
     var valid = true;
 
     if (!isValidEmail(email)) { markErr(su_email, document.getElementById('su_email_err'), 'Enter a valid email'); valid = false; }
-    else if (DB.findByEmail(email)) { markErr(su_email, document.getElementById('su_email_err'), 'Email already registered'); valid = false; }
     if (!isValidUsername(user)) { markErr(su_user, document.getElementById('su_user_err'), '3–20 chars, letters numbers and _ only'); valid = false; }
-    else if (DB.findByUsername(user)) { markErr(su_user, document.getElementById('su_user_err'), 'Username already taken'); valid = false; }
     if (pw.length < 8) { markErr(su_pw, document.getElementById('su_pw_err'), 'Password must be at least 8 characters'); valid = false; }
     if (conf !== pw)   { markErr(su_conf, document.getElementById('su_conf_err'), 'Passwords do not match'); valid = false; }
     if (!su_terms.checked) { su_form_err.textContent = 'You must agree to the Terms of Service'; valid = false; }
-
     if (!valid) return;
 
     setLoading(suSubmit, true);
 
-    var hash = hashPassword(pw);
+    if (window.UserSync) {
+        UserSync.register(email, user, pw).then(function (res) {
+            if (res.ok) { onAuthed(res.data, false, 'Welcome to UniVersity, '); return; }
+            if (res.data && res.data.error === 'email_taken') { markErr(su_email, document.getElementById('su_email_err'), 'Email already registered'); setLoading(suSubmit, false); return; }
+            if (res.data && res.data.error === 'username_taken') { markErr(su_user, document.getElementById('su_user_err'), 'Username already taken'); setLoading(suSubmit, false); return; }
+            if (res.status === 503) { return localSignup(email, user, pw); }
+            su_form_err.textContent = (res.data && res.data.error) || 'Could not create account'; setLoading(suSubmit, false);
+        }).catch(function () { localSignup(email, user, pw); });
+    } else { localSignup(email, user, pw); }
+});
+
+function localSignup(email, user, pw) {
+    if (DB.findByEmail(email)) { markErr(su_email, document.getElementById('su_email_err'), 'Email already registered'); setLoading(suSubmit, false); return; }
+    if (DB.findByUsername(user)) { markErr(su_user, document.getElementById('su_user_err'), 'Username already taken'); setLoading(suSubmit, false); return; }
     var newUser = {
         id: 'user_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-        email: email,
-        username: user,
-        passwordHash: hash,
-        createdAt: new Date().toISOString()
+        email: email, username: user, passwordHash: hashPassword(pw), createdAt: new Date().toISOString()
     };
     DB.add(newUser);
-
-    Session.set(newUser, false);
-    showToast('Welcome to UniVersity, ' + newUser.username + '!');
-    setTimeout(function () { window.location.href = postAuthDest(); }, 1000);
-});
+    onAuthed({ user: newUser }, false, 'Welcome to UniVersity, ');
+}
 
 forgotBtn.addEventListener('click', function () {
     forgotOverlay.classList.add('open');
