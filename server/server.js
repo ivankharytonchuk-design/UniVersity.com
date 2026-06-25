@@ -533,12 +533,73 @@ app.post('/api/ai/ask', async (req, res) => {
 // ── Daily university-news digest ──────────────────────────────
 // The browser keeps each user's saved-university list in sync here (saved unis
 // live in the browser's localStorage), so the daily job knows what to look up.
+
+// Stripe is the permanent record of every Elite buyer. We mirror each buyer's
+// favourites + destination country into their subscription METADATA so the weekly
+// digest can reach them with personalisation even after the (ephemeral) local DB
+// is reset. Returns [{ email, universities, country }] for all Elite subscribers.
+async function listEliteRecipients() {
+  const out = [];
+  for (const status of ELITE_STATUSES) {
+    let starting_after;
+    do {
+      const page = await stripe.subscriptions.list({
+        status, limit: 100, starting_after, expand: ['data.customer'],
+      });
+      for (const s of page.data) {
+        const cust = (s.customer && typeof s.customer === 'object') ? s.customer : null;
+        const email = (s.metadata && s.metadata.digest_email) || (cust && cust.email) || null;
+        if (!email) continue;
+        let universities = [];
+        try { universities = JSON.parse((s.metadata && s.metadata.digest_unis) || '[]'); } catch (e) {}
+        out.push({ email, universities, country: (s.metadata && s.metadata.digest_country) || null });
+      }
+      starting_after = page.has_more ? page.data[page.data.length - 1].id : null;
+    } while (starting_after);
+  }
+  return out;
+}
+
+// Persist a buyer's digest preferences into their active Stripe subscription's
+// metadata. Looks the subscription up straight from Stripe by email so it works
+// even when the local DB has been reset. No-op for non-Elite / no subscription.
+async function persistDigestPrefs(email, universities, country) {
+  try {
+    if (!email) return;
+    const customers = await stripe.customers.list({ email: String(email).toLowerCase(), limit: 1 });
+    const cust = customers.data[0];
+    if (!cust) return;
+    const subs = await stripe.subscriptions.list({ customer: cust.id, status: 'all', limit: 10 });
+    const sub = subs.data.find(function (s) { return ELITE_STATUSES.indexOf(s.status) !== -1; });
+    if (!sub) return;
+    const names = (Array.isArray(universities) ? universities : [])
+      .map(function (u) { return typeof u === 'string' ? u : (u && u.name) || ''; })
+      .map(function (s) { return String(s).trim(); }).filter(Boolean);
+    let unisJson = JSON.stringify(names.slice(0, 30));
+    while (unisJson.length > 480 && names.length) { names.pop(); unisJson = JSON.stringify(names); }
+    await stripe.subscriptions.update(sub.id, {
+      metadata: { digest_email: email, digest_unis: unisJson, digest_country: country || '' },
+    });
+  } catch (e) { errlog('persistDigestPrefs failed:', e.message); }
+}
+
 app.post('/api/digest/subscribe', (req, res) => {
   try {
     const { email, userId, universities, country } = req.body || {};
     const out = digest.subscribe({ email, userId, universities, country });
+    // Mirror into Stripe metadata (durable) — fire-and-forget, Elite users only.
+    persistDigestPrefs(email, universities, country);
     res.json({ ok: true, ...out });
   } catch (e) { res.status(400).json({ error: 'subscribe_failed', message: e.message }); }
+});
+
+// Admin: list every Elite member (from Stripe — the durable source of truth).
+app.get('/api/admin/elite', async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const members = await listEliteRecipients();
+    res.json({ ok: true, count: members.length, members });
+  } catch (e) { res.status(500).json({ error: 'list_failed', message: e.message }); }
 });
 
 app.post('/api/digest/unsubscribe', (req, res) => {
@@ -572,8 +633,15 @@ app.all('/api/digest/cron', async (req, res) => {
   (async () => {
     try {
       digest.seedFromTargetsFile();
-      const results = await digest.runDigest(mailer, synthesize);
-      log('Cron digest sent to ' + results.filter(r => r.sent).length + '/' + results.length + ' subscribers.');
+      // Recipients = every Elite buyer (from Stripe, durable) + any locally-stored
+      // subscribers / digest-targets.json entries. runDigest de-dupes by email.
+      let elite = [];
+      try { elite = await listEliteRecipients(); }
+      catch (e) { errlog('listEliteRecipients failed:', e.message); }
+      const recipients = elite.concat(digest._all.all());
+      const results = await digest.runDigest(mailer, synthesize, null, recipients);
+      log('Cron digest: ' + results.filter(r => r.sent).length + '/' + results.length +
+          ' sent (' + elite.length + ' Elite from Stripe).');
     } catch (e) { errlog('Cron digest failed:', e.message); }
   })();
 });

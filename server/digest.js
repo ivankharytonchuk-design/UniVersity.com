@@ -225,8 +225,13 @@ function uniCardHtml(b) {
   }
   return '<div style="margin:0 0 20px">' + head + b.items.map(itemHtml).join('') + '</div>';
 }
-function buildHtml({ intro, uniBlocks, countryBlock }) {
+function buildHtml({ intro, uniBlocks, countryBlock, nudge }) {
   const cards = uniBlocks.map(uniCardHtml).join('');
+  const nudgeBox = nudge
+    ? '<div style="margin:0 0 20px;padding:14px 16px;background:#fff3e3;border:1px solid #ffe0bd;border-radius:12px;font-size:13.5px;color:#9a5b2c;line-height:1.55">' +
+        '⭐ <b>Make this yours.</b> Open UniVersity and bookmark the universities you care about — your next brief will feature news tailored to them.' +
+      '</div>'
+    : '';
   const country = countryBlock
     ? '<div style="margin:24px 0 0;padding:18px 18px 6px;background:#faf9f5;border:1px solid #eee;border-radius:14px">' +
         '<div style="font-size:13px;font-weight:800;color:#8a6d3b;text-transform:uppercase;letter-spacing:.5px;margin:0 0 4px">Meanwhile, around ' + esc(countryBlock.country) + '</div>' +
@@ -241,7 +246,7 @@ function buildHtml({ intro, uniBlocks, countryBlock }) {
     '</div>' +
     '<div style="background:#fff;padding:24px;border:1px solid #eee;border-top:none;border-radius:0 0 14px 14px">' +
       '<p style="font-size:14.5px;color:#4a5160;line-height:1.6;margin:0 0 20px">' + esc(intro) + '</p>' +
-      cards + country +
+      nudgeBox + cards + country +
       '<div style="border-top:1px solid #eee;margin-top:18px;padding-top:14px;font-size:11.5px;color:#8a909c">' +
         'Curated for your saved universities — only the interesting bits, not every press release.' +
       '</div>' +
@@ -252,8 +257,12 @@ function buildHtml({ intro, uniBlocks, countryBlock }) {
 async function sendOne(mailer, synth, sub) {
   let names = [];
   try { names = JSON.parse(sub.universities || '[]'); } catch (e) {}
-  if (!names.length) return { email: sub.email, skipped: 'no_saved_universities' };
   const country = sub.country || null;
+  // Elite buyers who haven't picked favourites yet still get a useful email — the
+  // destination country/city news plus a nudge to personalise it. Only skip if we
+  // have nothing at all to show them (no favourites AND no destination country).
+  const nudge = !names.length;
+  if (nudge && !country) return { email: sub.email, skipped: 'no_unis_no_country' };
 
   const uniBlocks = []; let quiet = 0; let total = 0;
   for (const name of names.slice(0, 10)) {
@@ -275,7 +284,7 @@ async function sendOne(mailer, synth, sub) {
   }
 
   const intro = await introLine(total, names.length, !!countryBlock);
-  const html = buildHtml({ intro, uniBlocks, countryBlock });
+  const html = buildHtml({ intro, uniBlocks, countryBlock, nudge });
   const subject = total
     ? 'Your student brief — ' + total + ' update' + (total === 1 ? '' : 's')
     : 'Your student brief — quiet week';
@@ -302,9 +311,20 @@ async function sendOne(mailer, synth, sub) {
   return { email: sub.email, sent: true, headlines: total, via: 'smtp' };
 }
 
-/* Run the brief for every subscriber (or just one email, for testing). */
-async function runDigest(mailer, synth, onlyEmail) {
-  const subs = onlyEmail ? [_one.get(String(onlyEmail).toLowerCase())].filter(Boolean) : _all.all();
+/* Run the brief. With `subsOverride` (an explicit [{email,universities,country}]
+   list, e.g. built from Stripe) it emails those; otherwise every stored subscriber
+   (or just one, for testing). De-duplicated by email. */
+async function runDigest(mailer, synth, onlyEmail, subsOverride) {
+  let subs;
+  if (onlyEmail) subs = [_one.get(String(onlyEmail).toLowerCase())].filter(Boolean);
+  else if (Array.isArray(subsOverride)) subs = subsOverride;
+  else subs = _all.all();
+  const seen = {};
+  subs = subs.filter(function (s) {
+    if (!s || !s.email) return false;
+    const k = String(s.email).toLowerCase();
+    if (seen[k]) return false; seen[k] = 1; return true;
+  });
   const results = [];
   for (const sub of subs) {
     try { results.push(await sendOne(mailer, synth, sub)); }
