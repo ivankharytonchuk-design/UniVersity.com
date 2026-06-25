@@ -5537,10 +5537,10 @@ try { syncDigestSubscription(); } catch (e) {}
         var on = digestEnabled();
         t.checked = on;
         if (lbl) lbl.textContent = on
-            ? 'On — a daily round-up of news about your saved universities.'
-            : 'Off — you won\'t get the daily news email.';
+            ? 'On — a weekly round-up of news about your saved universities.'
+            : 'Off — you won\'t get the weekly news email.';
     }
-    if (!user || !user.email) { t.disabled = true; if (lbl) lbl.textContent = 'Sign in with an email to receive the daily news email.'; return; }
+    if (!user || !user.email) { t.disabled = true; if (lbl) lbl.textContent = 'Sign in with an email to receive the weekly news email.'; return; }
     paint();
     t.addEventListener('change', function () {
         setDigestEnabled(t.checked);

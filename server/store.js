@@ -53,6 +53,10 @@ async function init() {
       updated_at TIMESTAMPTZ DEFAULT now(),
       PRIMARY KEY (user_id, key)
     );
+    CREATE TABLE IF NOT EXISTS digest_optout (
+      email      TEXT PRIMARY KEY,
+      created_at TIMESTAMPTZ DEFAULT now()
+    );
   `);
   console.log('[store] Postgres schema ready.');
 }
@@ -124,7 +128,22 @@ async function deleteData(userId, key) {
   await pool.query('DELETE FROM user_data WHERE user_id=$1 AND key=$2', [userId, String(key)]);
 }
 
+// ── Durable digest opt-out (so the "weekly email" toggle actually works for
+//    every recipient — Stripe Elite buyers AND digest-targets.json entries) ──
+async function setDigestOptOut(email, off) {
+  if (!pool || !email) return;
+  email = norm(email);
+  if (off) await pool.query('INSERT INTO digest_optout (email) VALUES ($1) ON CONFLICT (email) DO NOTHING', [email]);
+  else await pool.query('DELETE FROM digest_optout WHERE email=$1', [email]);
+}
+async function getDigestOptOuts() {
+  if (!pool) return [];
+  const r = await pool.query('SELECT email FROM digest_optout');
+  return r.rows.map((x) => x.email);
+}
+
 module.exports = {
   enabled, init, register, login, userForToken, logout,
   getData, getAllData, putData, deleteData,
+  setDigestOptOut, getDigestOptOuts,
 };

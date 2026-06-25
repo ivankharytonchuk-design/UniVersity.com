@@ -652,6 +652,7 @@ app.post('/api/digest/subscribe', (req, res) => {
     const out = digest.subscribe({ email, userId, universities, country });
     // Mirror into Stripe metadata (durable) — fire-and-forget, Elite users only.
     persistDigestPrefs(email, universities, country);
+    store.setDigestOptOut(email, false).catch(function () {});   // opted in
     res.json({ ok: true, ...out });
   } catch (e) { res.status(400).json({ error: 'subscribe_failed', message: e.message }); }
 });
@@ -667,7 +668,9 @@ app.get('/api/admin/elite', async (req, res) => {
 
 app.post('/api/digest/unsubscribe', (req, res) => {
   try {
-    const out = digest.unsubscribe((req.body && req.body.email) || '');
+    const email = (req.body && req.body.email) || '';
+    const out = digest.unsubscribe(email);
+    store.setDigestOptOut(email, true).catch(function () {});   // durable opt-out (turns the weekly email off for good)
     res.json({ ok: true, ...out });
   } catch (e) { res.status(400).json({ error: 'unsubscribe_failed', message: e.message }); }
 });
@@ -701,7 +704,12 @@ app.all('/api/digest/cron', async (req, res) => {
       let elite = [];
       try { elite = await listEliteRecipients(); }
       catch (e) { errlog('listEliteRecipients failed:', e.message); }
-      const recipients = elite.concat(digest._all.all());
+      // Honour the "weekly email" toggle: drop anyone who opted out (durable, Neon).
+      let optouts = [];
+      try { optouts = await store.getDigestOptOuts(); } catch (e) {}
+      const offSet = {}; optouts.forEach(function (e) { offSet[String(e).toLowerCase()] = 1; });
+      const recipients = elite.concat(digest._all.all())
+        .filter(function (r) { return r.email && !offSet[String(r.email).toLowerCase()]; });
       const results = await digest.runDigest(mailer, synthesize, null, recipients);
       log('Cron digest: ' + results.filter(r => r.sent).length + '/' + results.length +
           ' sent (' + elite.length + ' Elite from Stripe).');
