@@ -470,6 +470,7 @@ app.get('/api/elite/content', requireElite, (_req, res) => {
 const qdrant = require('./qdrant');
 const synthesize = require('./synthesize');
 const digest = require('./digest');
+const store = require('./store');
 
 function requireAdmin(req, res) {
   const token = req.headers['x-admin-token'] || (req.body && req.body.token) || req.query.token;
@@ -528,6 +529,68 @@ app.post('/api/ai/ask', async (req, res) => {
     errlog('ai/ask failed:', e.message);
     res.status(500).json({ error: 'ask_failed', message: e.message });
   }
+});
+
+// ── Server-side accounts + per-user data sync (Postgres / Neon) ─────────────
+function bearerToken(req) {
+  const h = req.headers['authorization'] || '';
+  if (h.indexOf('Bearer ') === 0) return h.slice(7);
+  return (req.query && req.query.token) || (req.body && req.body.sessionToken) || null;
+}
+async function requireAccount(req, res) {
+  const user = await store.userForToken(bearerToken(req));
+  if (!user) { res.status(401).json({ error: 'unauthorized' }); return null; }
+  return user;
+}
+
+app.post('/api/account/register', async (req, res) => {
+  if (!store.enabled()) return res.status(503).json({ error: 'accounts_disabled' });
+  try {
+    const out = await store.register(req.body || {});
+    try { upsertUser({ id: out.user.id, email: out.user.email, username: out.user.username }); } catch (e) {}
+    res.json({ ok: true, ...out });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+app.post('/api/account/login', async (req, res) => {
+  if (!store.enabled()) return res.status(503).json({ error: 'accounts_disabled' });
+  try {
+    const out = await store.login(req.body || {});
+    try { upsertUser({ id: out.user.id, email: out.user.email, username: out.user.username }); } catch (e) {}
+    res.json({ ok: true, ...out });
+  } catch (e) { res.status(401).json({ error: e.message }); }
+});
+
+app.get('/api/account/me', async (req, res) => {
+  const user = await requireAccount(req, res); if (!user) return;
+  res.json({ ok: true, user });
+});
+
+app.post('/api/account/logout', async (req, res) => {
+  try { await store.logout(bearerToken(req)); } catch (e) {}
+  res.json({ ok: true });
+});
+
+// Per-user data: each key is one JSON blob (mirrors the old localStorage keys).
+app.get('/api/data', async (req, res) => {
+  const user = await requireAccount(req, res); if (!user) return;
+  try { res.json({ ok: true, data: await store.getAllData(user.id) }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/api/data/:key', async (req, res) => {
+  const user = await requireAccount(req, res); if (!user) return;
+  try { res.json({ ok: true, value: await store.getData(user.id, req.params.key) }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.put('/api/data/:key', async (req, res) => {
+  const user = await requireAccount(req, res); if (!user) return;
+  try { await store.putData(user.id, req.params.key, req.body ? req.body.value : null); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.delete('/api/data/:key', async (req, res) => {
+  const user = await requireAccount(req, res); if (!user) return;
+  try { await store.deleteData(user.id, req.params.key); res.json({ ok: true }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 // ── Daily university-news digest ──────────────────────────────
@@ -708,6 +771,7 @@ app.get('/', (_req, res) => res.sendFile(path.join(__dirname, '..', 'design', 'i
 // ── Boot ──────────────────────────────────────────────────────
 app.listen(PORT, async () => {
   log(`UniVersity payment server listening on ${APP_URL}`);
+  try { await store.init(); } catch (e) { errlog('store.init failed:', e.message); }
   // Qdrant config: .env wins; otherwise fall back to admin-saved settings.
   try {
     if (!process.env.QDRANT_URL) { const u = getSetting('qdrant_url'); if (u) process.env.QDRANT_URL = u; }
