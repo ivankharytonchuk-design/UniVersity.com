@@ -264,11 +264,13 @@ async function sendOne(mailer, synth, sub) {
     if (!items.length) quiet++;
   }
 
-  // If anything was quiet, look around the destination country for ≥2 interesting items.
+  // Always include news from the destination country & its cities — it's frequent
+  // and relevant (e.g. a UK destination gets UK university + city news), not just a
+  // fallback for when a university was quiet.
   let countryBlock = null;
-  if (country && quiet > 0) {
+  if (country) {
     const raw = await fetchCountryNews(country);
-    const items = await curate({ kind: 'country', name: countryName(country) }, raw, 4);
+    const items = await curate({ kind: 'country', name: countryName(country) }, raw, 5);
     if (items.length) { countryBlock = { country: countryName(country), items }; total += items.length; }
   }
 

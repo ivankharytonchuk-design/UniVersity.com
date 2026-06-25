@@ -13,9 +13,10 @@ name: Daily university digest
 #   DIGEST_CRON_TOKEN  the value Render generated for DIGEST_CRON_TOKEN
 on:
   schedule:
-    # 09:00 UTC = 11:00 in Madrid (summer/CEST). In winter it lands at 10:00 local.
-    # NOTE: GitHub cron is UTC only and scheduled runs can be delayed 5–30 min.
-    - cron: "0 9 * * *"
+    # Weekly — every MONDAY at 09:00 UTC = 11:00 in Madrid (summer/CEST), 10:00 in
+    # winter. Weekly gives news time to accumulate. NOTE: GitHub cron is UTC only
+    # and scheduled runs can be delayed 5–30 min. (Last field: 1 = Monday.)
+    - cron: "0 9 * * 1"
   workflow_dispatch: {}
 
 jobs:

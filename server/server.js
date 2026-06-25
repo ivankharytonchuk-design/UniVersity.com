@@ -535,8 +535,8 @@ app.post('/api/ai/ask', async (req, res) => {
 // live in the browser's localStorage), so the daily job knows what to look up.
 app.post('/api/digest/subscribe', (req, res) => {
   try {
-    const { email, userId, universities } = req.body || {};
-    const out = digest.subscribe({ email, userId, universities });
+    const { email, userId, universities, country } = req.body || {};
+    const out = digest.subscribe({ email, userId, universities, country });
     res.json({ ok: true, ...out });
   } catch (e) { res.status(400).json({ error: 'subscribe_failed', message: e.message }); }
 });
