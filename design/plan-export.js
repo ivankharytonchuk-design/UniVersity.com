@@ -87,22 +87,7 @@
         if (!w) { alert('Please allow pop-ups to export your plan.'); return; }
         w.document.open(); w.document.write(buildReport()); w.document.close();
     }
+    // The launcher button lives in the Overview quick-actions bar (hub.js).
+    // Exposed for it (and anything else) to call.
     window.exportApplicationPlan = exportPlan;
-
-    // Inject the launcher button into the Saved Universities section header.
-    function injectBtn() {
-        if (document.getElementById('planExportBtn')) return;
-        var hd = document.querySelector('#tabOverview .mp__section .mp__section__hd');
-        if (!hd) return;
-        var btn = document.createElement('button');
-        btn.id = 'planExportBtn';
-        btn.className = 'mp__section__action plan__export__btn';
-        btn.innerHTML = '<i class="fa-solid fa-file-arrow-down"></i> Export plan (PDF) <span class="plan__elite">Elite</span>';
-        btn.addEventListener('click', exportPlan);
-        var actionsWrap = hd.querySelector('.mp__section__action');
-        if (actionsWrap && actionsWrap.parentNode) actionsWrap.parentNode.insertBefore(btn, actionsWrap);
-        else hd.appendChild(btn);
-    }
-    function boot() { injectBtn(); }
-    if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', boot);
 })();

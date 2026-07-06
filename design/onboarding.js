@@ -81,6 +81,8 @@
         close();
         try { if (window.renderGamification) window.renderGamification(); } catch (e) {}
         toast('You’re all set' + (state.name ? ', ' + state.name : '') + '! Your app is personalised. 🎉');
+        // The setup now leads somewhere: open the personalised snapshot hub.
+        try { if (window.openHub) setTimeout(window.openHub, 500); } catch (e) {}
     }
 
     function toast(msg) {
