@@ -48,6 +48,53 @@
         return list.slice(0, 3);
     }
 
+    function streakCount() { try { var s = JSON.parse(localStorage.getItem('us_streak_' + uid()) || 'null'); return s ? (s.count || 0) : 0; } catch (e) { return 0; } }
+    function greeting() { var h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening'; }
+
+    var FACTS = [
+        'Applying to 5–8 universities is the sweet spot — enough ambition, enough safety.',
+        'Many courses admit on a rolling basis, so applying early genuinely boosts your odds.',
+        'A focused personal statement beats a long one — show <b>fit</b>, not just a list of achievements.',
+        'An upward grade trend can impress admissions as much as the average itself.',
+        'Scholarships go unclaimed every year — check each university’s funding page before you apply.',
+        'Students who track deadlines miss almost none. Small habit, huge payoff.',
+        'A virtual campus tour helps you write a far more convincing “why this university”.',
+        'Reference letters take time — ask your teachers <b>weeks</b> before the deadline, not days.',
+        'Balance your list: a couple of reach schools, a few matches, one or two safe bets.',
+        'Consistency wins. A little progress each day beats a last-minute scramble — keep your streak alive!',
+        'Tuition is only half the story — living costs vary hugely by city. Budget for both.',
+        'Re-read your statement out loud. If it sounds like you, it’ll sound genuine to them too.'
+    ];
+    function factOfDay() { var d = new Date(); var doy = Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 86400000); return FACTS[doy % FACTS.length]; }
+
+    function completeness() {
+        var p = prof(), sv = saved(), gi = gradeInfo(), di = deadlineInfo();
+        var checks = [!!p.name, (p.subjects || []).length > 0, sv.length > 0, gi.has, (di.overdue + di.soon + di.month + di.custom) > 0, (p.priorities || []).length > 0];
+        var done = checks.filter(Boolean).length;
+        return { pct: Math.round(done / checks.length * 100), done: done, total: checks.length };
+    }
+    function nextStep() {
+        var p = prof(), sv = saved(), gi = gradeInfo(), di = deadlineInfo();
+        if (!p.name || !(p.subjects || []).length) return { t: 'Finish your 30-second setup so every page is tailored to you.', cta: 'Complete setup', act: 'onboarding' };
+        if (!sv.length) return { t: 'Save your first university to start building your shortlist.', cta: 'Explore universities', go: 'explore' };
+        if (!gi.has) return { t: 'Add your grades to unlock your real admission chances.', cta: 'Open Gradebook', go: 'gradebook' };
+        if ((di.overdue + di.soon + di.month + di.custom) === 0) return { t: 'Add your key deadlines so nothing ever slips through.', cta: 'Open Deadlines', go: 'tracker' };
+        return { t: 'Your foundations are set — time to start and track an application.', cta: 'Go to Apply', go: 'compare' };
+    }
+    function kpi(ic, val, lbl, c) {
+        return '<div class="hub__kpi"><span class="hub__kpi__ic" style="color:' + c + ';background:' + c + '1f"><i class="fa-solid ' + ic + '"></i></span>' +
+            '<div><div class="hub__kpi__v">' + val + '</div><div class="hub__kpi__l">' + lbl + '</div></div></div>';
+    }
+    function kpisHTML() {
+        var sv = saved().length, gi = gradeInfo(), di = deadlineInfo(), st = streakCount();
+        return '<div class="hub__kpis">' +
+            kpi('fa-bookmark', sv, 'Shortlisted', '#d97c14') +
+            kpi('fa-chart-line', gi.pct != null ? gi.pct + '%' : '—', 'Avg grade', '#2ecc71') +
+            kpi('fa-calendar-check', (di.overdue + di.soon), 'Due soon', '#ff9f43') +
+            kpi('fa-fire', st, 'Day streak', '#ff5a4d') +
+        '</div>';
+    }
+
     function square(cls, icon, title, bodyHTML, ctaLabel, onClickAttr) {
         return '<div class="hub__sq hub__sq--' + cls + '">' +
             '<div class="hub__sq__hd"><span class="hub__sq__ic"><i class="fa-solid ' + icon + '"></i></span><span class="hub__sq__t">' + title + '</span></div>' +
@@ -101,12 +148,28 @@
         var p = prof();
         el = document.createElement('div');
         el.className = 'hub__overlay';
+        var comp = completeness(), ns = nextStep();
         el.innerHTML =
-            '<div class="hub__panel">' +
+            '<div class="hub__panel hub__panel--full">' +
                 '<button class="hub__close" title="Close"><i class="fa-solid fa-xmark"></i></button>' +
-                '<div class="hub__head"><span class="hub__head__badge"><i class="fa-solid fa-grip"></i></span>' +
-                    '<div><div class="hub__title">Your snapshot' + (p.name ? ', ' + esc(p.name) : '') + '</div>' +
-                    '<div class="hub__sub">Everything that matters, in one place — tap any card to dive in.</div></div></div>' +
+                '<div class="hub__hero">' +
+                    '<div class="hub__hero__main"><span class="hub__head__badge"><i class="fa-solid fa-grip"></i></span>' +
+                        '<div><div class="hub__title">' + greeting() + (p.name ? ', ' + esc(p.name) : '') + ' 👋</div>' +
+                        '<div class="hub__sub">Here’s your personalised snapshot — everything that matters, in one place.</div></div></div>' +
+                    '<div class="hub__prog">' +
+                        '<div class="hub__prog__top"><span>Profile ' + comp.pct + '% complete</span><span>' + comp.done + '/' + comp.total + ' steps</span></div>' +
+                        '<div class="hub__prog__bar"><i style="width:' + comp.pct + '%"></i></div>' +
+                    '</div>' +
+                '</div>' +
+                kpisHTML() +
+                '<div class="hub__row2">' +
+                    '<div class="hub__tip"><span class="hub__tip__ic"><i class="fa-solid fa-lightbulb"></i></span>' +
+                        '<div><b>Did you know?</b> <span>' + factOfDay() + '</span></div></div>' +
+                    '<div class="hub__next"><span class="hub__next__ic"><i class="fa-solid fa-wand-magic-sparkles"></i></span>' +
+                        '<div class="hub__next__tx"><b>Your next best step</b><span>' + ns.t + '</span></div>' +
+                        '<button class="hub__next__cta" ' + (ns.act ? 'data-act="' + ns.act + '"' : 'data-go="' + ns.go + '"') + '>' + ns.cta + ' <i class="fa-solid fa-arrow-right"></i></button></div>' +
+                '</div>' +
+                '<div class="hub__sec__t"><i class="fa-solid fa-compass"></i> Explore your journey</div>' +
                 buildSquares() +
             '</div>';
         document.body.appendChild(el);
@@ -119,6 +182,7 @@
         el.querySelector('.hub__close').addEventListener('click', close);
         document.addEventListener('keydown', onKey);
         el.addEventListener('click', function (e) {
+            var a = e.target.closest('[data-act]'); if (a) { close(); if (a.dataset.act === 'onboarding' && window.openOnboarding) setTimeout(window.openOnboarding, 200); return; }
             var g = e.target.closest('[data-go]'); if (g) { go(g.dataset.go); return; }
             var u = e.target.closest('[data-uni]');
             if (u) { var uni = findUni(u.dataset.uni); close(); try { if (uni && window.showUniDetail) window.showUniDetail(uni); else if (window.showTab) window.showTab('explore'); } catch (er) {} }
