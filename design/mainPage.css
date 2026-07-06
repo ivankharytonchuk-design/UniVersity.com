@@ -17441,3 +17441,7 @@ select:focus-visible, input:focus-visible, textarea:focus-visible {
     .dlx__hero, .dlx__inner > *, .dlx__photo, .dlx__orb, .dlx__sheen, .dlx__id__badge { animation: none !important; }
     .dlx__photo { transform: none; }
 }
+
+/* Application plan export button (Overview). Remove plan-export.js include to undo. */
+.plan__export__btn { display: inline-flex; align-items: center; gap: 7px; }
+.plan__elite { font-size: 8px; font-weight: 900; letter-spacing: .08em; text-transform: uppercase; color: #fff; background: linear-gradient(135deg,#f59220,#d97c14); padding: 2px 6px; border-radius: 6px; }
