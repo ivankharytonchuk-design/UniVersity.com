@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UniVersity · Counsellor Dashboard</title>
+<link rel="icon" type="image/png" href="images/earth.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.7.2/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<!-- Self-contained B2B dashboard (MVP, local roster). Delete this file to undo. -->
+<style>
+:root{--orange:#d97c14;--orange2:#f59220;--off:#faf8f4;--white:#fff;--surface:#fff5e8;--border:#f0d9b5;--border2:#e8c48a;--text:#1c1409;--text2:#5c4a28;--text3:#9e7d45}
+*{box-sizing:border-box}body{margin:0;font-family:Montserrat,sans-serif;background:var(--off);color:var(--text);min-height:100vh}
+.wrap{max-width:1080px;margin:0 auto;padding:26px 20px 60px}
+.top{display:flex;align-items:center;gap:14px;margin-bottom:6px}
+.top__logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,var(--orange2),var(--orange));display:flex;align-items:center;justify-content:center;color:#fff;font-size:20px;box-shadow:0 10px 24px -8px rgba(217,124,20,.7)}
+.top h1{font-family:Syne,Montserrat,sans-serif;font-weight:800;font-size:24px;margin:0;letter-spacing:-.02em}
+.top .tag{font-size:10px;font-weight:900;letter-spacing:.1em;color:#fff;background:linear-gradient(135deg,var(--orange2),var(--orange));padding:3px 8px;border-radius:6px;text-transform:uppercase}
+.sub{color:var(--text2);font-size:13px;margin:2px 0 22px}
+.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px}
+@media(max-width:720px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--white);border:1px solid var(--border);border-radius:16px;padding:16px;box-shadow:0 8px 22px -16px rgba(20,24,40,.4)}
+.stat b{font-family:Syne,Montserrat,sans-serif;font-size:30px;font-weight:800;color:var(--orange);letter-spacing:-.03em}
+.stat span{display:block;font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+.stat--tot b{color:var(--text)}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--white);border:1px solid var(--border);border-radius:16px;padding:12px 14px;margin-bottom:18px}
+.bar input,.bar select{padding:10px 12px;border:1px solid var(--border2);border-radius:10px;font-family:inherit;font-size:13px;background:var(--off);color:var(--text)}
+.bar input{flex:1;min-width:150px}
+.btn{display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border:none;border-radius:11px;cursor:pointer;font-family:Montserrat;font-weight:800;font-size:13px;color:#fff;background:linear-gradient(135deg,var(--orange2),var(--orange));box-shadow:0 10px 22px -10px rgba(217,124,20,.8);transition:transform .18s,filter .18s}
+.btn:hover{transform:translateY(-2px);filter:brightness(1.05)}
+.board{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+@media(max-width:900px){.board{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:520px){.board{grid-template-columns:1fr}}
+.col{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:10px;min-height:120px}
+.col__hd{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);padding:4px 6px 10px}
+.col__hd .n{background:var(--white);border:1px solid var(--border);border-radius:99px;padding:1px 8px;color:var(--text3)}
+.col__dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:6px}
+.card{background:var(--white);border:1px solid var(--border);border-radius:13px;padding:11px;margin-bottom:9px;box-shadow:0 6px 16px -13px rgba(20,24,40,.5);animation:rise .35s cubic-bezier(.2,.8,.3,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.card__nm{font-weight:800;font-size:13.5px;display:flex;align-items:center;gap:7px}
+.card__av{width:24px;height:24px;border-radius:7px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:800;flex:0 0 auto}
+.card__meta{font-size:11px;color:var(--text3);margin:5px 0 8px}
+.card textarea{width:100%;border:1px solid var(--border);border-radius:9px;padding:7px 9px;font-family:inherit;font-size:11.5px;resize:vertical;min-height:34px;color:var(--text2);background:var(--off)}
+.card__row{display:flex;gap:6px;margin-top:8px}
+.card__row select{flex:1;padding:6px 8px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:11px;background:var(--off);color:var(--text)}
+.card__del{border:none;background:rgba(231,76,60,.1);color:#e74c3c;border-radius:8px;width:30px;cursor:pointer}
+.empty{color:var(--text3);font-size:11px;text-align:center;padding:16px 6px}
+.note{font-size:11px;color:var(--text3);margin-top:22px;text-align:center}
+.note a{color:var(--orange);font-weight:700}
+</style></head>
+<body>
+<div class="wrap">
+  <div class="top"><div class="top__logo"><i class="fa-solid fa-users-rectangle"></i></div>
+    <div><h1>Counsellor Dashboard <span class="tag">Beta</span></h1></div></div>
+  <p class="sub">Track your students’ university journeys in one place — add a student, set their stage, and keep notes.</p>
+
+  <div class="stats" id="stats"></div>
+
+  <div class="bar">
+    <input id="nName" placeholder="Student name" maxlength="50">
+    <input id="nEmail" placeholder="Email (optional)" maxlength="80">
+    <input id="nCountry" placeholder="Target country (optional)" maxlength="40">
+    <button class="btn" id="addBtn"><i class="fa-solid fa-user-plus"></i> Add student</button>
+  </div>
+
+  <div class="board" id="board"></div>
+
+  <p class="note">Local demo — data is stored in this browser only. A production version links to real student accounts. <a href="mainPage.html">← Back to app</a></p>
+</div>
+
+<script>
+var STAGES=[{k:'research',n:'Researching',c:'#8e8e93'},{k:'applying',n:'Applying',c:'#4aa3ff'},{k:'submitted',n:'Submitted',c:'#f59220'},{k:'interview',n:'Interview',c:'#9b59b6'},{k:'offer',n:'Offer',c:'#2ecc71'}];
+var KEY='us_counsellor_roster';
+function load(){try{return JSON.parse(localStorage.getItem(KEY)||'[]');}catch(e){return[];}}
+function save(d){localStorage.setItem(KEY,JSON.stringify(d));}
+var roster=load();
+if(!roster.length){roster=[
+  {id:'s1',name:'Ava Thompson',email:'ava@example.com',country:'United Kingdom',stage:'applying',notes:'Strong in Maths — pushing for Imperial & UCL.'},
+  {id:'s2',name:'Liam García',email:'liam@example.com',country:'Spain',stage:'research',notes:''},
+  {id:'s3',name:'Mia Chen',email:'',country:'Netherlands',stage:'submitted',notes:'TU Delft submitted, waiting on TU/e.'}
+];save(roster);}
+function uid(){return 's'+Date.now().toString(36);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c];});}
+function initials(n){return (n||'?').split(/\s+/).slice(0,2).map(function(w){return w[0];}).join('').toUpperCase();}
+function col(n){var h=0;for(var i=0;i<n.length;i++)h=n.charCodeAt(i)+((h<<5)-h);return 'hsl('+(h%360)+',55%,45%)';}
+
+function renderStats(){
+  var by={};STAGES.forEach(function(s){by[s.k]=0;});roster.forEach(function(r){by[r.stage]=(by[r.stage]||0)+1;});
+  var h='<div class="stat stat--tot"><b>'+roster.length+'</b><span>Students</span></div>';
+  h+=STAGES.map(function(s){return '<div class="stat"><b style="color:'+s.c+'">'+(by[s.k]||0)+'</b><span>'+s.n+'</span></div>';}).join('');
+  document.getElementById('stats').innerHTML=h;
+}
+function card(r){
+  return '<div class="card" data-id="'+r.id+'"><div class="card__nm"><span class="card__av" style="background:'+col(r.name)+'">'+esc(initials(r.name))+'</span>'+esc(r.name)+'</div>'+
+   '<div class="card__meta">'+(r.email?'<i class="fa-solid fa-envelope"></i> '+esc(r.email)+'<br>':'')+(r.country?'<i class="fa-solid fa-location-dot"></i> '+esc(r.country):'')+'</div>'+
+   '<textarea data-note="'+r.id+'" placeholder="Notes…">'+esc(r.notes||'')+'</textarea>'+
+   '<div class="card__row"><select data-stage="'+r.id+'">'+STAGES.map(function(s){return '<option value="'+s.k+'"'+(s.k===r.stage?' selected':'')+'>'+s.n+'</option>';}).join('')+'</select>'+
+   '<button class="card__del" data-del="'+r.id+'" title="Remove"><i class="fa-solid fa-trash-can"></i></button></div></div>';
+}
+function render(){
+  renderStats();
+  document.getElementById('board').innerHTML=STAGES.map(function(s){
+    var items=roster.filter(function(r){return r.stage===s.k;});
+    return '<div class="col"><div class="col__hd"><span><span class="col__dot" style="background:'+s.c+'"></span>'+s.n+'</span><span class="n">'+items.length+'</span></div>'+
+      (items.map(card).join('')||'<div class="empty">—</div>')+'</div>';
+  }).join('');
+}
+document.getElementById('addBtn').addEventListener('click',function(){
+  var n=document.getElementById('nName').value.trim();if(!n)return;
+  roster.push({id:uid(),name:n,email:document.getElementById('nEmail').value.trim(),country:document.getElementById('nCountry').value.trim(),stage:'research',notes:''});
+  save(roster);['nName','nEmail','nCountry'].forEach(function(i){document.getElementById(i).value='';});render();
+});
+document.getElementById('board').addEventListener('change',function(e){
+  var st=e.target.closest('[data-stage]');if(st){var r=roster.find(function(x){return x.id===st.dataset.stage;});if(r){r.stage=st.value;save(roster);render();}return;}
+});
+document.getElementById('board').addEventListener('input',function(e){
+  var nt=e.target.closest('[data-note]');if(nt){var r=roster.find(function(x){return x.id===nt.dataset.note;});if(r){r.notes=nt.value;save(roster);}}
+});
+document.getElementById('board').addEventListener('click',function(e){
+  var d=e.target.closest('[data-del]');if(d){roster=roster.filter(function(x){return x.id!==d.dataset.del;});save(roster);render();}
+});
+render();
+</script>
+</body></html>
