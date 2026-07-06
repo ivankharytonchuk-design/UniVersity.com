@@ -121,31 +121,12 @@
     function close() { if (!el) return; document.removeEventListener('keydown', onKey); el.classList.remove('open'); document.body.style.overflow = ''; var e = el; setTimeout(function () { e.remove(); }, 260); el = null; }
     window.openHub = open;
 
-    // ── Buttons: header (big screens) + Overview (laptops) ──
-    function headerBtn() {
-        if (document.getElementById('hubHdrBtn')) return true;
-        var right = document.querySelector('.mp__header__right'); if (!right) return false;
-        var b = document.createElement('button');
-        b.id = 'hubHdrBtn'; b.className = 'hub__hdr__btn'; b.title = 'Your snapshot';
-        b.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Snapshot</span>';
-        b.addEventListener('click', open);
-        right.insertBefore(b, right.firstChild);
-        return true;
-    }
-    function overviewBtn() {
-        var host = document.getElementById('tabOverview'); if (!host) return false;
-        if (document.getElementById('hubBar')) return true;
-        var bar = document.createElement('div'); bar.id = 'hubBar'; bar.className = 'hub__bar';
-        bar.innerHTML = '<button class="hub__btn hub__btn--primary" id="hubOpenBtn"><i class="fa-solid fa-wand-magic-sparkles"></i> Your snapshot</button>';
-        var gmf = document.getElementById('gmfWidget'), hero = host.querySelector('.mp__hero'), anchor = gmf || hero;
-        if (anchor && anchor.parentNode) anchor.parentNode.insertBefore(bar, anchor.nextSibling); else host.insertBefore(bar, host.firstChild);
-        bar.querySelector('#hubOpenBtn').addEventListener('click', open);
-        return true;
-    }
+    // The launcher lives in the Overview gamification section (gamification.js) and
+    // in Settings — no header/Overview button of our own any more.
     function wireSettings() {
         var r = document.getElementById('mpdRedoSetup'); if (r && !r.__w) { r.__w = 1; r.addEventListener('click', function () { if (window.openOnboarding) window.openOnboarding(); }); }
         var s = document.getElementById('mpdOpenSnapshot'); if (s && !s.__w) { s.__w = 1; s.addEventListener('click', open); }
     }
-    function boot() { var t = 0; (function a() { var ok = overviewBtn(); headerBtn(); wireSettings(); if (!ok && t++ < 20) setTimeout(a, 250); })(); }
+    function boot() { var t = 0; (function a() { wireSettings(); if ((!document.getElementById('mpdOpenSnapshot')) && t++ < 20) setTimeout(a, 250); })(); }
     if (document.readyState !== 'loading') boot(); else document.addEventListener('DOMContentLoaded', boot);
 })();

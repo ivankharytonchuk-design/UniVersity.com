@@ -70,18 +70,18 @@
                     '<div class="gmf__streak__meta">' +
                         '<div class="gmf__streak__num">' + st.count + '<span>day' + (st.count === 1 ? '' : 's') + '</span></div>' +
                         '<div class="gmf__streak__lbl">Daily streak</div>' +
-                        '<div class="gmf__streak__best"><i class="fa-solid fa-trophy"></i> Best: ' + (st.best || st.count) + ' · ' + earned + '/' + bs.length + ' badges</div>' +
+                        '<div class="gmf__streak__best"><i class="fa-solid fa-trophy"></i> Best: ' + (st.best || st.count) + ' days</div>' +
                     '</div>' +
                 '</div>' +
-                '<div class="gmf__badges">' +
-                    bs.map(function (b) {
-                        return '<div class="gmf__badge' + (b.got ? ' is-got' : '') + '" title="' + b.name + ' — ' + b.hint + '">' +
-                            '<span class="gmf__badge__ic"><i class="fa-solid ' + b.icon + '"></i>' + (b.got ? '' : '<span class="gmf__badge__lock"><i class="fa-solid fa-lock"></i></span>') + '</span>' +
-                            '<span class="gmf__badge__nm">' + b.name + '</span>' +
-                        '</div>';
-                    }).join('') +
+                '<div class="gmf__actions">' +
+                    '<button class="gmf__act gmf__act--snap" id="gmfSnap"><span class="gmf__act__ic"><i class="fa-solid fa-wand-magic-sparkles"></i></span>' +
+                        '<span class="gmf__act__tx"><b>Your snapshot</b><small>Progress &amp; your next step</small></span><i class="fa-solid fa-arrow-right gmf__act__go"></i></button>' +
+                    '<button class="gmf__act gmf__act--career" id="gmfCareer"><span class="gmf__act__ic"><i class="fa-solid fa-briefcase"></i></span>' +
+                        '<span class="gmf__act__tx"><b>Career paths</b><small>Top recruiters &amp; your odds</small></span><i class="fa-solid fa-arrow-right gmf__act__go"></i></button>' +
                 '</div>' +
             '</div>';
+        var snap = mount.querySelector('#gmfSnap'); if (snap) snap.addEventListener('click', function () { if (window.openHub) window.openHub(); });
+        var car = mount.querySelector('#gmfCareer'); if (car) car.addEventListener('click', function () { if (window.openCareers) window.openCareers(); });
     }
 
     window.renderGamification = render;
