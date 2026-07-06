@@ -316,6 +316,15 @@
                     '<div class="ur-rate__thanks' + (mine ? ' show' : '') + '">' +
                         '<i class="fa-solid fa-circle-check"></i> Thanks — your rating helps fellow students!' +
                     '</div>' +
+                    '<div class="ur-review">' +
+                        '<textarea class="ur-review__ta" id="urReviewText" maxlength="1000" placeholder="Optional — share a sentence about your experience (helps other students)"></textarea>' +
+                        '<button type="button" class="ur-review__post" id="urReviewPost"><i class="fa-solid fa-paper-plane"></i> Post review</button>' +
+                    '</div>' +
+                '</div>' +
+
+                '<div class="ur-community" id="urCommunity" style="display:none">' +
+                    '<div class="ur-h">Community reviews <span class="ur-community__count" id="urCommCount"></span></div>' +
+                    '<div class="ur-community__list" id="urCommList"></div>' +
                 '</div>' +
             '</div>';
 
@@ -339,6 +348,94 @@
 
         wireRate(overlay, id);
         wireClose(overlay);
+        wireReviews(overlay, id, v);
+    }
+
+    // ── Community reviews (server-backed) ────────────────────────────
+    function apiBase() {
+        if (location.protocol === 'file:') return 'http://localhost:4242';
+        var isLocal = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+        if (isLocal && location.port !== '4242') return 'http://localhost:4242';
+        return location.origin;
+    }
+    function currentUser() {
+        try { return (window.user && window.user.id) ? window.user : { id: 'guest', username: 'Student' }; }
+        catch (e) { return { id: 'guest', username: 'Student' }; }
+    }
+    function timeAgo(iso) {
+        try {
+            var d = Date.now() - new Date(String(iso).replace(' ', 'T') + 'Z').getTime();
+            var days = Math.floor(d / 86400000);
+            if (days <= 0) return 'today';
+            if (days === 1) return 'yesterday';
+            if (days < 30) return days + ' days ago';
+            if (days < 365) return Math.floor(days / 30) + ' mo ago';
+            return Math.floor(days / 365) + ' yr ago';
+        } catch (e) { return ''; }
+    }
+    function reviewCardHTML(r) {
+        var pct = clamp(r.rating / 5 * 100, 0, 100);
+        return '<div class="ur-comm">' +
+            '<div class="ur-comm__top">' +
+                '<span class="ur-comm__who"><i class="fa-solid fa-circle-user"></i> ' + (r.author || 'Student') + '</span>' +
+                '<span class="ur-stars" style="--s:12px;--gap:1px"><span class="ur-stars__bg">' + fiveStars() + '</span>' +
+                    '<span class="ur-stars__fg" data-fill="' + pct + '" style="width:' + pct + '%">' + fiveStars() + '</span></span>' +
+                '<span class="ur-comm__ago">' + timeAgo(r.date) + '</span>' +
+            '</div>' +
+            (r.text ? '<div class="ur-comm__text">' + String(r.text).replace(/[<>]/g, '') + '</div>' : '') +
+        '</div>';
+    }
+    function wireReviews(overlay, id, v) {
+        var box = overlay.querySelector('#urCommunity');
+        var list = overlay.querySelector('#urCommList');
+        var cnt = overlay.querySelector('#urCommCount');
+        var ta = overlay.querySelector('#urReviewText');
+        var post = overlay.querySelector('#urReviewPost');
+        var base = apiBase();
+
+        function blendHero(agg) {
+            if (!agg || !agg.count) return;
+            var b = v.base;
+            var totalCount = b.count + agg.count;
+            var blended = round1((b.avg * b.count + agg.avg * agg.count) / totalCount);
+            var numEl = overlay.querySelector('[data-count]');
+            var intEl = overlay.querySelector('[data-count-int]');
+            var heroFg = overlay.querySelector('.ur-hero .ur-stars__fg');
+            var label = overlay.querySelector('[data-label]');
+            if (numEl) numEl.textContent = blended.toFixed(1);
+            if (intEl) intEl.textContent = fmt(totalCount);
+            if (heroFg) heroFg.style.width = (blended / 5 * 100) + '%';
+            if (label) label.textContent = avgLabel(blended);
+        }
+        function render(agg) {
+            if (agg && agg.mine && agg.mine.text && ta && !ta.value) ta.value = agg.mine.text;
+            if (agg && agg.items && agg.items.length) {
+                box.style.display = '';
+                cnt.textContent = agg.count + (agg.count === 1 ? ' review' : ' reviews');
+                list.innerHTML = agg.items.map(reviewCardHTML).join('');
+                revealFills(list);
+                blendHero(agg);
+            }
+        }
+        fetch(base + '/api/reviews/' + encodeURIComponent(id) + '?userId=' + encodeURIComponent(currentUser().id))
+            .then(function (r) { return r.json(); }).then(render).catch(function () {});
+
+        if (post) post.addEventListener('click', function () {
+            var mine = getMine(id);
+            if (!mine) { post.classList.add('ur-review__post--nudge'); setTimeout(function () { post.classList.remove('ur-review__post--nudge'); }, 600); return; }
+            var u = currentUser();
+            post.disabled = true; post.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Posting…';
+            fetch(base + '/api/reviews', {
+                method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ uniId: id, userId: u.id, author: u.username || 'Student', rating: mine, text: ta ? ta.value : '' })
+            }).then(function (r) { return r.json(); }).then(function (agg) {
+                post.disabled = false; post.innerHTML = '<i class="fa-solid fa-circle-check"></i> Posted!';
+                setTimeout(function () { post.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Update review'; }, 1600);
+                render(agg);
+            }).catch(function () {
+                post.disabled = false; post.innerHTML = '<i class="fa-solid fa-paper-plane"></i> Post review';
+            });
+        });
     }
 
     function wireClose(overlay) {

@@ -633,6 +633,19 @@ app.post('/api/account/logout', async (req, res) => {
 });
 
 // Per-user data: each key is one JSON blob (mirrors the old localStorage keys).
+// ── Student reviews (feed the star ratings) ──
+const reviews = require('./reviews');
+app.get('/api/reviews/:uniId', (req, res) => {
+  try { res.json({ ok: true, ...reviews.getForUni(req.params.uniId, (req.query && req.query.userId) || '') }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/reviews', (req, res) => {
+  try {
+    const b = req.body || {};
+    res.json({ ok: true, ...reviews.addReview({ uniId: b.uniId, userId: b.userId, author: b.author, rating: b.rating, text: b.text }) });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 app.get('/api/data', async (req, res) => {
   const user = await requireAccount(req, res); if (!user) return;
   try { res.json({ ok: true, data: await store.getAllData(user.id) }); }
