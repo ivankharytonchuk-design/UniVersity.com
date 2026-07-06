@@ -165,4 +165,28 @@ function extractiveAnswer(question, comments) {
   return out;
 }
 
-module.exports = { synthesize, hasOpenAI, MODEL };
+/* ── Generic single-shot chat completion (no RAG) ──
+ * Used by the AI application assistant to draft / critique personal statements.
+ * Returns { text, model } or throws 'not_configured' if no API key is set. */
+async function chat(system, userMsg, opts) {
+  opts = opts || {};
+  var client = await getOpenAI();
+  if (!client) { var e = new Error('not_configured'); e.code = 'not_configured'; throw e; }
+  var provider = resolveProvider();
+  var completion = await client.chat.completions.create({
+    model: (provider && provider.model) || MODEL,
+    temperature: opts.temperature != null ? opts.temperature : 0.7,
+    max_tokens: opts.maxTokens || 1100,
+    messages: [
+      { role: 'system', content: system },
+      { role: 'user', content: userMsg }
+    ]
+  });
+  var text = (completion.choices &&
+              completion.choices[0] &&
+              completion.choices[0].message &&
+              completion.choices[0].message.content || '').trim();
+  return { text: text, model: (provider && provider.model) || MODEL };
+}
+
+module.exports = { synthesize, hasOpenAI, chat, MODEL };

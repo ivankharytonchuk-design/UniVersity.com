@@ -37,7 +37,28 @@ const _upsert = db.prepare(`
 const _all = db.prepare(`SELECT * FROM digest_subs`);
 const _one = db.prepare(`SELECT * FROM digest_subs WHERE email = ?`);
 const _markSent = db.prepare(`UPDATE digest_subs SET last_sent = datetime('now') WHERE email = ?`);
+// Durable "sent" stamp that works even for recipients not yet in the table
+// (e.g. Stripe-built Elite lists) — so the weekly cadence gate applies to them too.
+const _markSentUpsert = db.prepare(`
+  INSERT INTO digest_subs (email, last_sent) VALUES (?, datetime('now'))
+  ON CONFLICT(email) DO UPDATE SET last_sent = datetime('now')
+`);
 const _delete = db.prepare(`DELETE FROM digest_subs WHERE email = ?`);
+
+// Minimum days between digests for a given recipient. The runners may fire daily
+// (in-process timer) or weekly (cron) and from several sources; this gate is what
+// actually guarantees "at most once a week" per person. Override via env.
+const MIN_DIGEST_DAYS = parseFloat(process.env.DIGEST_MIN_DAYS || '6.5');
+function sentRecently(email) {
+  try {
+    const row = _one.get(String(email || '').toLowerCase());
+    if (!row || !row.last_sent) return false;
+    // SQLite datetime('now') is UTC "YYYY-MM-DD HH:MM:SS".
+    const last = new Date(String(row.last_sent).replace(' ', 'T') + 'Z').getTime();
+    if (isNaN(last)) return false;
+    return (Date.now() - last) < MIN_DIGEST_DAYS * 86400000;
+  } catch (e) { return false; }
+}
 
 function unsubscribe(email) {
   email = String(email || '').trim().toLowerCase();
@@ -298,7 +319,7 @@ async function sendOne(mailer, synth, sub) {
       body: JSON.stringify({ from, to: [sub.email], subject, html }),
     });
     if (!r.ok) { const t = await r.text(); throw new Error('Resend ' + r.status + ': ' + t.slice(0, 200)); }
-    _markSent.run(sub.email);
+    _markSentUpsert.run(String(sub.email).toLowerCase());
     return { email: sub.email, sent: true, headlines: total, via: 'resend' };
   }
 
@@ -307,7 +328,7 @@ async function sendOne(mailer, synth, sub) {
     from: process.env.SMTP_FROM || ('UniVersity <' + process.env.SMTP_USER + '>'),
     to: sub.email, subject, html,
   });
-  _markSent.run(sub.email);
+  _markSentUpsert.run(String(sub.email).toLowerCase());
   return { email: sub.email, sent: true, headlines: total, via: 'smtp' };
 }
 
@@ -327,6 +348,13 @@ async function runDigest(mailer, synth, onlyEmail, subsOverride) {
   });
   const results = [];
   for (const sub of subs) {
+    // Weekly cadence: never email the same person more than once per
+    // MIN_DIGEST_DAYS — regardless of how often a runner fires. An explicit
+    // single-recipient run (onlyEmail, e.g. a test/"send now") bypasses it.
+    if (!onlyEmail && sentRecently(sub.email)) {
+      results.push({ email: sub.email, sent: false, skipped: 'rate_limited' });
+      continue;
+    }
     try { results.push(await sendOne(mailer, synth, sub)); }
     catch (e) { results.push({ email: sub.email, error: e.message }); }
   }

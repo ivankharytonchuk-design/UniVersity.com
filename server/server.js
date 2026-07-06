@@ -531,6 +531,67 @@ app.post('/api/ai/ask', async (req, res) => {
   }
 });
 
+// ── AI application assistant: draft / critique personal statements ──────────
+app.post('/api/ai/essay', async (req, res) => {
+  try {
+    const { mode, university, program, degree, notes, draft } = req.body || {};
+    const uni  = String(university || '').trim();
+    const prog = String(program || '').trim();
+    const deg  = String(degree || '').trim();
+    const isCritique = mode === 'critique';
+
+    if (isCritique && !String(draft || '').trim()) {
+      return res.status(400).json({ error: 'missing_draft', message: 'Paste your draft to get feedback.' });
+    }
+    if (!isCritique && !String(notes || '').trim()) {
+      return res.status(400).json({ error: 'missing_notes', message: 'Add a few notes about yourself first.' });
+    }
+
+    const system =
+      'You are an expert university admissions coach and writing mentor. You help applicants write ' +
+      'authentic, compelling personal statements / motivation letters. Rules: be honest and specific; ' +
+      'never invent achievements or facts the student did not provide; keep an encouraging, human tone; ' +
+      'avoid clichés and generic filler; write in clear, natural English. Format with short paragraphs ' +
+      '(and headings/bullets only when genuinely helpful).';
+
+    const target = [
+      prog && ('Programme: ' + prog),
+      deg  && ('Degree level: ' + deg),
+      uni  && ('University: ' + uni)
+    ].filter(Boolean).join('\n');
+
+    let userMsg, maxTokens, temperature;
+    if (isCritique) {
+      userMsg =
+        (target ? target + '\n\n' : '') +
+        'Critique the following personal statement. Give: (1) a short overall impression, ' +
+        '(2) 3–6 concrete strengths and weaknesses as bullets, (3) specific, actionable suggestions, ' +
+        'and (4) one rewritten opening paragraph as an example. Be candid but constructive.\n\n' +
+        '--- DRAFT ---\n' + String(draft).trim();
+      maxTokens = 1100; temperature = 0.5;
+    } else {
+      userMsg =
+        (target ? target + '\n\n' : '') +
+        'Write a first-draft personal statement (~450–550 words) based ONLY on these notes about the ' +
+        'applicant. Make it specific and authentic; do not fabricate awards, grades or experiences ' +
+        'beyond what is given. Leave a clearly-marked [add a specific example here] placeholder where ' +
+        'the student should add detail rather than inventing it.\n\n--- APPLICANT NOTES ---\n' +
+        String(notes).trim();
+      maxTokens = 1200; temperature = 0.75;
+    }
+
+    const out = await synthesize.chat(system, userMsg, { maxTokens, temperature });
+    if (!out.text) return res.status(502).json({ error: 'empty', message: 'The AI returned an empty response. Try again.' });
+    res.json({ ok: true, mode: isCritique ? 'critique' : 'draft', text: out.text, model: out.model });
+  } catch (e) {
+    if (e && e.code === 'not_configured') {
+      return res.status(503).json({ error: 'not_configured', message: 'The AI writing assistant is not set up yet (no API key).' });
+    }
+    errlog('ai/essay failed:', e.message);
+    res.status(500).json({ error: 'essay_failed', message: e.message });
+  }
+});
+
 // ── Server-side accounts + per-user data sync (Postgres / Neon) ─────────────
 function bearerToken(req) {
   const h = req.headers['authorization'] || '';

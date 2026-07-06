@@ -6,7 +6,7 @@
     <title> UniVersity | Home</title>
     <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <link rel="stylesheet" href="mainPage.css">
+    <link rel="stylesheet" href="mainPage.css?v=16">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
@@ -26,6 +26,9 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&family=Raleway:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/lipis/flag-icons@7.3.2/css/flag-icons.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="globeModal.css?v=5" />
+    <link rel="stylesheet" href="ratings.css?v=4" />
     <link rel="icon" type="image/png" sizes="32x32" href="images/earth.png">
 </head>
 <body>
@@ -127,7 +130,6 @@
                 <div class="mpd__section">
                     <div class="mpd__section__label"><i class="fa-solid fa-user-group"></i> Switch account</div>
                     <div class="mpd__accounts" id="mpdAccounts"></div>
-                    <a href="log-in.html" class="mpd__addacct"><i class="fa-solid fa-plus"></i> Add / sign in another account</a>
                 </div>
             </div>
         </div>
@@ -165,7 +167,7 @@
     <div class="mp__country__strip" id="countryStrip">
         <div class="mp__cs__row">
             <div class="mp__cs__left">
-                <i class="fa-solid fa-earth-europe mp__cs__globe"></i>
+                <img src="images/earth.png" alt="" class="mp__cs__globe">
                 <span class="mp__cs__label">Study destination:</span>
                 <div class="mp__cs__selected" id="csSelected">
                     <span class="mp__cs__flag" id="csFlag"></span>
@@ -313,6 +315,19 @@
         <div class="dshacad__goal" id="dshAcadGoal" style="display:none"></div>
     </div>
 
+    <div id="dshAcadEmpty" class="mp__empty dshacad__empty" style="display:none">
+        <div class="mp__empty__icon"><i class="fa-solid fa-chart-line"></i></div>
+        <h3>Track your academic progress</h3>
+        <p>See your average, trajectory and how ready you are for your target universities — in four quick steps:</p>
+        <div class="mp__guide__steps">
+            <div class="mp__guide__step"><span class="mp__guide__num">1</span><span class="mp__guide__step__ic"><i class="fa-solid fa-graduation-cap"></i></span><span class="mp__guide__step__txt"><b>Open Gradebook</b><span>Your academic hub</span></span></div>
+            <div class="mp__guide__step"><span class="mp__guide__num">2</span><span class="mp__guide__step__ic"><i class="fa-solid fa-file-arrow-up"></i></span><span class="mp__guide__step__txt"><b>Add your grades</b><span>Upload a PDF or add subjects</span></span></div>
+            <div class="mp__guide__step"><span class="mp__guide__num">3</span><span class="mp__guide__step__ic"><i class="fa-solid fa-chart-simple"></i></span><span class="mp__guide__step__txt"><b>See your trend</b><span>Average &amp; trajectory over time</span></span></div>
+            <div class="mp__guide__step"><span class="mp__guide__num">4</span><span class="mp__guide__step__ic"><i class="fa-solid fa-bullseye"></i></span><span class="mp__guide__step__txt"><b>Check readiness</b><span>How close you are to target unis</span></span></div>
+        </div>
+        <button class="mp__empty__btn" data-goto="gradebook"><i class="fa-solid fa-graduation-cap"></i> Open Gradebook</button>
+    </div>
+
     <div class="rnk__section__wrap">
         <div class="rnk__section__hd">
             <div>
@@ -346,7 +361,13 @@
         <div id="savedEmpty" class="mp__empty">
             <div class="mp__empty__icon"><i class="fa-regular fa-bookmark"></i></div>
             <h3>No saved universities yet</h3>
-            <p>Go to Explore, browse universities and click the bookmark icon to save them here.</p>
+            <p>Build your shortlist in four quick steps:</p>
+            <div class="mp__guide__steps">
+                <div class="mp__guide__step"><span class="mp__guide__num">1</span><span class="mp__guide__step__ic"><i class="fa-solid fa-compass"></i></span><span class="mp__guide__step__txt"><b>Open Explore</b><span>Search every university worldwide</span></span></div>
+                <div class="mp__guide__step"><span class="mp__guide__num">2</span><span class="mp__guide__step__ic"><i class="fa-solid fa-sliders"></i></span><span class="mp__guide__step__txt"><b>Filter &amp; browse</b><span>By city, field, type or your chances</span></span></div>
+                <div class="mp__guide__step"><span class="mp__guide__num">3</span><span class="mp__guide__step__ic"><i class="fa-solid fa-bookmark"></i></span><span class="mp__guide__step__txt"><b>Tap the bookmark</b><span>Save any university you like</span></span></div>
+                <div class="mp__guide__step"><span class="mp__guide__num">4</span><span class="mp__guide__step__ic"><i class="fa-solid fa-scale-balanced"></i></span><span class="mp__guide__step__txt"><b>Compare them</b><span>They show up right here to compare</span></span></div>
+            </div>
             <button class="mp__empty__btn" data-goto="explore"><i class="fa-solid fa-compass"></i> Go to Explore</button>
         </div>
         <div id="savedGrid" class="mp__uni__grid" style="display:none"></div>
@@ -369,7 +390,13 @@
         <div id="savedPlacesEmpty" class="mp__empty">
             <div class="mp__empty__icon"><i class="fa-regular fa-heart"></i></div>
             <h3>No saved places yet</h3>
-            <p>Go to City Guide, explore a city and click the heart icon next to any highlight to save it here.</p>
+            <p>Collect the spots you love in four quick steps:</p>
+            <div class="mp__guide__steps">
+                <div class="mp__guide__step"><span class="mp__guide__num">1</span><span class="mp__guide__step__ic"><i class="fa-solid fa-map-location-dot"></i></span><span class="mp__guide__step__txt"><b>Open City Guide</b><span>Discover student cities</span></span></div>
+                <div class="mp__guide__step"><span class="mp__guide__num">2</span><span class="mp__guide__step__ic"><i class="fa-solid fa-city"></i></span><span class="mp__guide__step__txt"><b>Pick a city</b><span>Explore its highlights &amp; vibe</span></span></div>
+                <div class="mp__guide__step"><span class="mp__guide__num">3</span><span class="mp__guide__step__ic"><i class="fa-solid fa-heart"></i></span><span class="mp__guide__step__txt"><b>Tap the heart</b><span>On any place you love</span></span></div>
+                <div class="mp__guide__step"><span class="mp__guide__num">4</span><span class="mp__guide__step__ic"><i class="fa-solid fa-bookmark"></i></span><span class="mp__guide__step__txt"><b>Find them here</b><span>Your saved places, all in one spot</span></span></div>
+            </div>
             <button class="mp__empty__btn" data-goto="cityguide"><i class="fa-solid fa-map-location-dot"></i> Go to City Guide</button>
         </div>
         <div id="savedPlacesGrid" class="mp__places__grid" style="display:none"></div>
@@ -499,7 +526,12 @@
     <section class="exp__filter__card">
         <div class="exp__filter__card__header">
             <div class="exp__filter__card__title"><i class="fa-solid fa-sliders"></i> Filter &amp; Browse</div>
-            <button class="exp__filter__reset__btn" id="cmpClear"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+            <div class="exp__filter__card__actions">
+                <button class="exp__savegb__btn" id="expSaveGbBtn" title="Use these filters for your Gradebook's realistic options">
+                    <i class="fa-solid fa-graduation-cap"></i> <span>Use for Gradebook</span>
+                </button>
+                <button class="exp__filter__reset__btn" id="cmpClear"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+            </div>
         </div>
         <div class="exp__filter__search__row">
             <div class="exp__filter__search__wrap">
@@ -540,6 +572,17 @@
                         <option value="">Any type</option>
                         <option value="Public">Public</option>
                         <option value="Private">Private</option>
+                    </select>
+                </div>
+            </div>
+            <div class="exp__filter__chip__group">
+                <span class="exp__filter__chip__label">My chance</span>
+                <div class="cs__wrap cs__wrap--sm">
+                    <select class="cmp__filter__select" id="fReach" title="Filter by your admission chance — needs your gradebook grades">
+                        <option value="">Any chance</option>
+                        <option value="Safety">🟢 Safety</option>
+                        <option value="Match">🔵 Match</option>
+                        <option value="Reach">🟠 Reach</option>
                     </select>
                 </div>
             </div>
@@ -628,6 +671,8 @@
                 <button class="cg2__pill" data-city="Salamanca"><i class="fa-solid fa-book-open"></i><span>Salamanca</span></button>
             </div>
         </div>
+
+        <section class="visa" id="cgVisaGuide" style="display:none"></section>
 
         <div class="cg2__panel" id="cg2Panel" style="display:none">
             <button class="cg2__panel__close" id="cg2PanelClose" title="Close city guide">
@@ -990,6 +1035,7 @@
                     <label class="ins__label"><i class="fa-solid fa-star-half-stroke"></i> Your Grade / Score</label>
                     <input class="ins__input" type="number" id="admGrade" placeholder="e.g. 82" min="0" max="100" step="0.1">
                     <span class="ins__grade__hint" id="admHint">Enter a number between 0 and 100</span>
+                    <button type="button" class="ins__usegrades" id="admUseGrades" style="display:none"><i class="fa-solid fa-wand-magic-sparkles"></i> Use my gradebook average</button>
                 </div>
                 <div class="ins__field" id="admAlevelField" style="display:none">
                     <label class="ins__label"><i class="fa-solid fa-star-half-stroke"></i> Your A-Level Grade</label>
@@ -1090,8 +1136,8 @@
         <div class="ins__section__hd">
             <div class="ins__section__hd__icon" style="background:rgba(155,89,182,.12);color:#9b59b6"><i class="fa-solid fa-scale-balanced"></i></div>
             <div>
-                <div class="ins__section__title">Is It Worth It? Return on Investment</div>
-                <div class="ins__section__sub">Pick a university and degree to see how long until it pays for itself — total cost vs. expected salary</div>
+                <div class="ins__section__title">True Cost &amp; ROI — Is It Worth It?</div>
+                <div class="ins__section__sub">The real all-in cost of studying here — tuition, living, visa &amp; insurance, minus likely scholarships — vs. expected salary and payback time</div>
             </div>
         </div>
 
@@ -1124,7 +1170,7 @@
                         <option value="arts">Arts &amp; Humanities</option>
                     </select>
                 </div>
-                <button class="ins__calc__btn" id="roiCalcBtn"><i class="fa-solid fa-scale-balanced"></i> Calculate ROI</button>
+                <button class="ins__calc__btn" id="roiCalcBtn"><i class="fa-solid fa-scale-balanced"></i> Calculate true cost &amp; ROI</button>
             </div>
 
             <div class="ins__result ins__result--photo" id="roiResult">
@@ -1155,65 +1201,63 @@
 
 <div id="tabTracker" style="display:none">
 
-    <div class="dl__hero">
-        <img class="dl__hero__img" src="images/DemonSlayer.jpeg" alt="" aria-hidden="true">
-        <div class="dl__hero__shade" aria-hidden="true"></div>
-        <div class="dl__hero__deco" aria-hidden="true">
-            <i class="fa-solid fa-hourglass-half"></i>
-        </div>
-        <button class="hero__editpic" data-hero="deadlines" title="Change photo (right-click to reset)"><i class="fa-solid fa-camera"></i></button>
-        <div class="dl__hero__top">
-            <div class="dl__hero__left">
-                <div class="dl__hero__icon"><i class="fa-solid fa-calendar-check"></i></div>
-                <div>
-                    <h2 class="dl__hero__title">Deadline Tracker</h2>
-                    <p class="dl__hero__sub">Stay on top of every important date in your application journey</p>
-                </div>
-            </div>
-            <div class="dl__hero__right">
-                <label class="dl__toggle">
-                    <input type="checkbox" id="dlSavedOnly">
-                    <span class="dl__toggle__track"><span class="dl__toggle__thumb"></span></span>
-                    <span class="dl__toggle__txt"><i class="fa-solid fa-bookmark"></i> Saved unis only</span>
-                </label>
-                <button class="dl__add__btn" id="dlAddBtn"><i class="fa-solid fa-plus"></i> Add Deadline</button>
-            </div>
-        </div>
+    <section class="dlx__hero">
+        <img class="dl__hero__img dlx__photo" src="images/DemonSlayer.jpeg" alt="" aria-hidden="true">
+        <span class="dlx__scrim" aria-hidden="true"></span>
+        <span class="dlx__orb dlx__orb--1" aria-hidden="true"></span>
+        <span class="dlx__orb dlx__orb--2" aria-hidden="true"></span>
+        <span class="dlx__sheen" aria-hidden="true"></span>
+        <button class="hero__editpic dlx__editpic" data-hero="deadlines" title="Change photo (right-click to reset)"><i class="fa-solid fa-camera"></i></button>
 
-        <div class="dl__cats">
-            <button class="dl__cat active" data-cat="all"><i class="fa-solid fa-list"></i> All</button>
-            <button class="dl__cat" data-cat="application"><i class="fa-solid fa-file-pen"></i> Applications</button>
-            <button class="dl__cat" data-cat="scholarship"><i class="fa-solid fa-medal"></i> Scholarships</button>
-            <button class="dl__cat" data-cat="openday"><i class="fa-solid fa-calendar-check"></i> Open Days</button>
-            <button class="dl__cat" data-cat="accommodation"><i class="fa-solid fa-house"></i> Accommodation</button>
-            <button class="dl__cat" data-cat="interview"><i class="fa-solid fa-user-tie"></i> Interviews</button>
-            <button class="dl__cat" data-cat="personal"><i class="fa-regular fa-bell"></i> My Reminders</button>
-        
-
-            <div class="dl__summary">
-                <div class="dl__sum__pill dl__sum--overdue">
-                    <i class="fa-solid fa-triangle-exclamation"></i>
-                    <span id="dlCntOverdue">0</span>
-                    <span class="dl__sum__lbl">Overdue</span>
+        <div class="dlx__inner">
+            <div class="dlx__top">
+                <div class="dlx__id">
+                    <span class="dlx__id__badge"><i class="fa-solid fa-calendar-check"></i></span>
+                    <div class="dlx__id__txt">
+                        <h2 class="dlx__title">Deadline Tracker</h2>
+                        <p class="dlx__sub">Stay on top of every important date in your application journey</p>
+                    </div>
                 </div>
-                <div class="dl__sum__pill dl__sum--soon">
-                    <i class="fa-solid fa-fire"></i>
-                    <span id="dlCntSoon">0</span>
-                    <span class="dl__sum__lbl">This Week</span>
-                </div>
-                <div class="dl__sum__pill dl__sum--month">
-                    <i class="fa-solid fa-clock"></i>
-                    <span id="dlCntMonth">0</span>
-                    <span class="dl__sum__lbl">This Month</span>
-                </div>
-                <div class="dl__sum__pill dl__sum--done">
-                    <i class="fa-solid fa-circle-check"></i>
-                    <span id="dlCntDone">0</span>
-                    <span class="dl__sum__lbl">Completed</span>
+                <div class="dlx__actions">
+                    <label class="dlx__toggle" title="Show only deadlines for your saved universities">
+                        <input type="checkbox" id="dlSavedOnly">
+                        <span class="dlx__toggle__track"><span class="dlx__toggle__thumb"></span></span>
+                        <span class="dlx__toggle__txt"><i class="fa-solid fa-bookmark"></i> Saved unis only</span>
+                    </label>
+                    <button class="dlx__add" id="dlAddBtn"><span class="dlx__add__shine" aria-hidden="true"></span><i class="fa-solid fa-plus"></i> Add Deadline</button>
                 </div>
             </div>
+
+            <div class="dlx__stats">
+                <div class="dlx__stat dlx__stat--overdue">
+                    <span class="dlx__stat__ic"><i class="fa-solid fa-triangle-exclamation"></i></span>
+                    <span class="dlx__stat__meta"><span class="dlx__stat__num" id="dlCntOverdue">0</span><span class="dlx__stat__lbl">Overdue</span></span>
+                </div>
+                <div class="dlx__stat dlx__stat--soon">
+                    <span class="dlx__stat__ic"><i class="fa-solid fa-fire"></i></span>
+                    <span class="dlx__stat__meta"><span class="dlx__stat__num" id="dlCntSoon">0</span><span class="dlx__stat__lbl">This Week</span></span>
+                </div>
+                <div class="dlx__stat dlx__stat--month">
+                    <span class="dlx__stat__ic"><i class="fa-solid fa-clock"></i></span>
+                    <span class="dlx__stat__meta"><span class="dlx__stat__num" id="dlCntMonth">0</span><span class="dlx__stat__lbl">This Month</span></span>
+                </div>
+                <div class="dlx__stat dlx__stat--done">
+                    <span class="dlx__stat__ic"><i class="fa-solid fa-circle-check"></i></span>
+                    <span class="dlx__stat__meta"><span class="dlx__stat__num" id="dlCntDone">0</span><span class="dlx__stat__lbl">Completed</span></span>
+                </div>
+            </div>
+
+            <div class="dlx__cats">
+                <button class="dl__cat active" data-cat="all"><i class="fa-solid fa-list"></i> All</button>
+                <button class="dl__cat" data-cat="application"><i class="fa-solid fa-file-pen"></i> Applications</button>
+                <button class="dl__cat" data-cat="scholarship"><i class="fa-solid fa-medal"></i> Scholarships</button>
+                <button class="dl__cat" data-cat="openday"><i class="fa-solid fa-calendar-check"></i> Open Days</button>
+                <button class="dl__cat" data-cat="accommodation"><i class="fa-solid fa-house"></i> Accommodation</button>
+                <button class="dl__cat" data-cat="interview"><i class="fa-solid fa-user-tie"></i> Interviews</button>
+                <button class="dl__cat" data-cat="personal"><i class="fa-regular fa-bell"></i> My Reminders</button>
+            </div>
         </div>
-    </div>
+    </section>
 
     <div class="dl__list" id="dlList"></div>
 
@@ -1225,6 +1269,14 @@
         <button class="dl__add__btn" id="dlEmptyAddBtn"><i class="fa-solid fa-plus"></i> Add a Reminder</button>
     </div>
 
+    <div class="exp__break">
+        <div class="exp__break__line"></div>
+        <div class="exp__break__pill"><i class="fa-solid fa-list-check"></i> <span>Application Checklist</span></div>
+        <div class="exp__break__line"></div>
+    </div>
+
+    <section class="ckl" id="dlChecklist"></section>
+
 </div>
 
 </main>
@@ -1234,8 +1286,8 @@
         <button class="mp__modal__close" id="dlAddClose"><i class="fa-solid fa-xmark"></i></button>
         <h3><i class="fa-solid fa-calendar-plus" style="color:#6c63ff;font-size:15px"></i> Add Deadline</h3>
         <div class="mp__modal__field">
-            <span class="mp__modal__label">Title *</span>
-            <input type="text" id="dlTitle" placeholder="e.g. MSc Computer Science Application Deadline">
+            <span class="mp__modal__label">Title * <span class="mp__modal__count" id="dlTitleCount">0/50</span></span>
+            <input type="text" id="dlTitle" maxlength="50" placeholder="e.g. Oxford CS Application">
         </div>
         <div class="mp__modal__field">
             <span class="mp__modal__label">Category *</span>
@@ -1516,7 +1568,8 @@
 
 <!-- ══════════════ GRADEBOOK & ACADEMIC PROGRESS ══════════════ -->
 <div id="tabGradebook" style="display:none">
-    <div class="gb__hero">
+    <div class="gb__hero gb__hero--empty">
+        <button class="gb__hero__optslink" id="gbOpenSuggest" style="display:none"><i class="fa-solid fa-wand-magic-sparkles"></i> See my realistic options</button>
         <div class="gb__hero__text">
             <p class="gb__hero__tag"><i class="fa-solid fa-chart-line"></i> Academic Progress</p>
             <h2 class="gb__hero__title">Your Gradebook</h2>
@@ -1538,14 +1591,24 @@
             </div>
         </div>
         <div class="gb__hero__graph">
+            <div class="gb__empty__graph">
+                <svg class="gb__empty__spark" viewBox="0 0 120 40" preserveAspectRatio="none" aria-hidden="true">
+                    <polyline points="0,33 24,27 48,30 72,17 96,21 120,7" fill="none" stroke="rgba(255,255,255,.3)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="3 6"/>
+                </svg>
+                <div class="gb__empty__cap"><i class="fa-solid fa-chart-line"></i> Your trajectory will appear here</div>
+            </div>
             <svg id="gbTrendGraph" class="gb__tg" viewBox="0 0 120 62" preserveAspectRatio="none" aria-hidden="true"></svg>
             <div class="gb__tg__lbl" id="gbTrendGraphLbl">Add grades to see your trajectory</div>
         </div>
         <div class="gb__hero__overall">
             <div class="gb__avg">
+                <div class="gb__empty__avg">
+                    <div class="gb__empty__ring"><i class="fa-solid fa-file-arrow-up"></i></div>
+                    <div class="gb__empty__avg__txt">No grades yet</div>
+                    <div class="gb__empty__avg__sub">Upload a report or add subjects to see your average</div>
+                </div>
                 <div class="gb__avg__num"><span id="gbRingNum">—</span></div>
                 <div class="gb__avg__lbl">Your average mark <span id="gbAvgScale" class="gb__avg__scale"></span></div>
-             
                 <div class="gb__trend__lbl" id="gbTrendLbl">Add grades to see your progress</div>
             </div>
         </div>
@@ -1563,21 +1626,31 @@
         </section>
 
         <aside class="gb__col gb__col--side">
-            <div class="gb__panel">
-                <div class="gb__panel__hd"><i class="fa-solid fa-gauge-high"></i> University Readiness</div>
-                <div id="gbReadiness" class="gb__readiness"></div>
+            <!-- Dream university (choose-first, then card) -->
+            <div class="gb__panel gb__dream__panel">
+                <div class="gb__panel__hd"><i class="fa-solid fa-star"></i> Dream University</div>
+                <div class="gb__target__choose" id="gbTargetChoose">
+                    <p class="gb__dream__hint">Pick the university you're aiming for to unlock uploads &amp; readiness.</p>
+                    <select id="gbAimSelect" class="gb__input"><option value="">Select a university…</option></select>
+                </div>
+                <div class="gb__target__chosen" id="gbTargetChosen" style="display:none">
+                    <div class="gb__dream__card">
+                        <span class="gb__dream__logo" id="gbDreamLogo">—</span>
+                        <div class="gb__dream__info">
+                            <div class="gb__dream__name" id="gbAimName">—</div>
+                            <div class="gb__dream__meta" id="gbDreamMeta"></div>
+                        </div>
+                        <button class="gb__target__change" id="gbTargetChange" title="Change university"><i class="fa-solid fa-pen-to-square"></i></button>
+                    </div>
+                </div>
             </div>
+
             <div class="gb__panel">
                 <div class="gb__panel__hd"><i class="fa-solid fa-triangle-exclamation"></i> Needs attention</div>
                 <div id="gbAttention" class="gb__attention"></div>
             </div>
         </aside>
     </div>
-
-    <section class="gb__block">
-        <div class="gb__sec__hd"><h3><i class="fa-solid fa-bullseye"></i> University Targets</h3><span class="gb__sec__sub">Pick from universities in your current destination</span></div>
-        <div class="gb__targets" id="gbTargets"></div>
-    </section>
 
     <section class="gb__block" id="gbGapsBlock">
         <div class="gb__sec__hd"><h3><i class="fa-solid fa-ruler-combined"></i> Requirements &amp; Gaps</h3><span class="gb__sec__sub">Your grades vs. typical entry requirements</span></div>
@@ -1590,17 +1663,6 @@
     </section>
 
     <section class="gb__block">
-        <div class="gb__sec__hd"><h3><i class="fa-solid fa-flag-checkered"></i> Improvement Goals</h3></div>
-        <div class="gb__goal__form">
-            <select id="gbGoalSubject" class="gb__input"></select>
-            <input type="number" id="gbGoalTarget" class="gb__input gb__input--sm" placeholder="Target avg" min="0" max="100">
-            <input type="month" id="gbGoalDate" class="gb__input gb__input--sm">
-            <button class="gb__btn gb__btn--primary" id="gbAddGoalBtn"><i class="fa-solid fa-plus"></i> Add goal &amp; deadline</button>
-        </div>
-        <div id="gbGoals" class="gb__goals"></div>
-    </section>
-
-    <section class="gb__block">
         <div class="gb__sec__hd"><h3><i class="fa-solid fa-wand-magic-sparkles"></i> Top Recommendations</h3><span class="gb__sec__sub">Universities that fit your marks — drag the slider to explore "what if"</span></div>
         <div class="gb__recctrl">
             <span class="gb__recctrl__lbl"><i class="fa-solid fa-sliders"></i> Try an average of</span>
@@ -1610,6 +1672,11 @@
         </div>
         <div id="gbRecs" class="gb__recs"></div>
     </section>
+</div>
+
+<!-- Realistic-options modal (auto-opens after a grade report is uploaded) -->
+<div class="gbsg__overlay" id="gbSuggestOverlay">
+    <div class="gbsg" id="gbSuggestModal" role="dialog" aria-modal="true"></div>
 </div>
 
 <input type="file" id="heroPicInput" accept="image/*" style="display:none">
@@ -1629,6 +1696,9 @@
             </div>
             <button class="fy__dock" id="fyDock" title="Move button to header"><i class="fa-solid fa-thumbtack"></i></button>
             <button class="fy__close" id="fyClose"><i class="fa-solid fa-xmark"></i></button>
+            <button class="fy__savegb" id="fySaveGbBtn" title="Save these filters so your Gradebook's realistic options use them">
+                <i class="fa-solid fa-graduation-cap"></i> <span>Use these filters for my Gradebook</span>
+            </button>
             <div class="fy__head__row">
                 <h2 class="fy__title">Find universities made for you</h2>
                 <div class="fy__head__btns">
@@ -1748,7 +1818,10 @@
 
 <script src="data/app_data.js"></script>
 <script src="userSync.js"></script>
-<script src="mainPage.js"></script>
+<script src="data/ratings_data.js?v=1"></script>
+<script src="ratings.js?v=2"></script>
+<script src="mainPage.js?v=16"></script>
+<script type="module" src="globeExperience.js?v=1"></script>
 
 </body>
 </html>

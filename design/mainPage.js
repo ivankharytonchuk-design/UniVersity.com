@@ -60,6 +60,16 @@ function getProfile() {
 }
 function setProfile(d) { localStorage.setItem(PROFILE_KEY, JSON.stringify(d)); }
 
+/* Explore filters the user chose to save for the Gradebook's "realistic options".
+   Set from the Explore page via the "Save filters for Gradebook" toggle. */
+var GB_FILTERS_KEY = 'us_gb_filters_' + user.id;
+function getGbFilters() {
+    try { return JSON.parse(localStorage.getItem(GB_FILTERS_KEY) || 'null'); } catch (e) { return null; }
+}
+function setGbFilters(d) {
+    try { if (d) localStorage.setItem(GB_FILTERS_KEY, JSON.stringify(d)); else localStorage.removeItem(GB_FILTERS_KEY); } catch (e) {}
+}
+
 function setBudgetMode(on) {
     budgetFilterOn = on;
     var btn = document.getElementById('budgetFilterBtn');
@@ -103,7 +113,7 @@ var TABS = { overview:'tabOverview', compare:'tabCompare', explore:'tabExplore',
 var currentTab = 'overview';
 
 function clearExploreFilters() {
-    ['cmpSearch','fCity','fField','fType','fTuition'].forEach(function(id) {
+    ['cmpSearch','fCity','fField','fType','fTuition','fReach'].forEach(function(id) {
         var el = document.getElementById(id);
         if (el) el.value = '';
     });
@@ -175,6 +185,30 @@ function animateStat(el, val) {
     el.classList.remove('updated'); void el.offsetWidth; el.classList.add('updated');
     el.addEventListener('animationend', function(){ el.classList.remove('updated'); }, { once: true });
 }
+
+// Playful count-up tween for a number element. Falls back to instant set
+// when the value is unchanged, tiny, or the user prefers reduced motion.
+function countUpStat(el, val) {
+    if (!el) return;
+    val = parseInt(val, 10) || 0;
+    var from = parseInt(el.textContent, 10);
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (reduce || isNaN(from) || from === val || Math.abs(val - from) < 2) { el.textContent = val; return; }
+    var start = null, dur = Math.min(900, 240 + Math.abs(val - from) * 12);
+    function step(ts) {
+        if (start === null) start = ts;
+        var p = Math.min(1, (ts - start) / dur);
+        var e = 1 - Math.pow(1 - p, 3);            // easeOutCubic
+        el.textContent = Math.round(from + (val - from) * e);
+        if (p < 1) requestAnimationFrame(step);
+        else {
+            el.textContent = val;
+            el.classList.add('bump');                                  // scale up …
+            setTimeout(function () { el.classList.remove('bump'); }, 220);  // … then settle back
+        }
+    }
+    requestAnimationFrame(step);
+}
 function updateRoadmap() {
     var saved     = getSaved().length;
     var apps      = getFormApps().length;
@@ -219,8 +253,8 @@ function updateStats() {
 
     var hTotal = document.getElementById('heroStatTotal');
     var hSaved = document.getElementById('heroStatSaved');
-    if (hTotal && typeof UNI !== 'undefined') hTotal.textContent = UNI.length;
-    if (hSaved) hSaved.textContent = getSaved().length;
+    if (hTotal && typeof UNI !== 'undefined') countUpStat(hTotal, UNI.length);
+    if (hSaved) countUpStat(hSaved, getSaved().length);
     if (typeof updateAppcount === 'function') updateAppcount();
     updateRoadmap();
 }
@@ -229,33 +263,99 @@ renderFriendRequests();
 updateFriendStats();
 updateFriendsBadge();
 
+/* ══════════════ Personalized admission chances ══════════════
+ * Reads the student's gradebook average (any scale → %) and compares it to each
+ * university's selectivity to label cards Safety / Match / Reach. Defined here
+ * (early) so card builders that run at startup can use it. */
+var ADM_PARAMS = {
+    1: { thresh:30, k:0.12 },
+    2: { thresh:50, k:0.16 },
+    3: { thresh:65, k:0.22 },
+    4: { thresh:75, k:0.30 },
+    5: { thresh:82, k:0.40 },
+};
+function cap(v) { return Math.min(99, Math.max(1, Math.round(v))); }
+function sigmoid(grade, thresh, k) {
+    return Math.round(100 / (1 + Math.exp(-k * (grade - thresh))));
+}
+
+var GB_SCALE_MAX = { pct:100, p10:10, p9:9, p8:8, p5:5, gpa:4 };
+// The student's overall gradebook average as a 0–100 percentage (null if no grades).
+function studentGradePercent() {
+    try {
+        var gb = JSON.parse(localStorage.getItem('us_gradebook_' + user.id) || 'null');
+        if (!gb || !gb.subjects || !gb.subjects.length) return null;
+        var max = GB_SCALE_MAX[gb.scale] || 100;
+        var vals = gb.subjects.map(function (s) {
+            if (s.grade != null && s.grade !== '') return Math.max(0, Math.min(max, +s.grade));
+            if (s.assessments && s.assessments.length) {
+                var w = 0, t = 0;
+                s.assessments.forEach(function (a) { var wt = a.weight || 1; w += wt; t += Math.max(0, Math.min(max, a.grade)) * wt; });
+                return w ? t / w : null;
+            }
+            return null;
+        }).filter(function (v) { return v != null; });
+        if (!vals.length) return null;
+        var avg = vals.reduce(function (a, b) { return a + b; }, 0) / vals.length;
+        return Math.max(0, Math.min(100, avg / max * 100));
+    } catch (e) { return null; }
+}
+
+// {prob, label, cls, color} for a uni given the student's grade — or null if no grades.
+function uniChanceInfo(u) {
+    var g = studentGradePercent();
+    if (g == null || !u) return null;
+    var p = ADM_PARAMS[u.diff] || ADM_PARAMS[3];
+    var prob = cap(sigmoid(g, p.thresh, p.k));
+    if (prob >= 70)      return { prob:prob, label:'Safety', cls:'safety', color:'#27ae60' };
+    if (prob >= 40)      return { prob:prob, label:'Match',  cls:'match',  color:'#2980b9' };
+    return { prob:prob, label:'Reach', cls:'reach', color:'#e67e22' };
+}
+
+// Inline badge HTML for a uni card (empty string when the student has no grades).
+function chanceBadgeHTML(u) {
+    var c = uniChanceInfo(u);
+    if (!c) return '';
+    return '<span class="mp__chance mp__chance--' + c.cls + '" title="Based on your gradebook average vs this university\'s selectivity">' +
+        '<i class="fa-solid fa-bullseye"></i> ' + c.label + ' · ' + c.prob + '%</span>';
+}
+
+// Re-render cards so badges reflect the latest grades (called after gradebook edits).
+window.refreshChanceBadges = function () {
+    try { renderSaved(); } catch (e) {}
+    try { if (typeof renderCompare === 'function') renderCompare(true); } catch (e) {}
+    try { if (window.syncAdmUseGrades) window.syncAdmUseGrades(); } catch (e) {}
+};
+
 function buildMiniCard(u) {
     var saved = getSaved();
     var on = saved.indexOf(u.id) !== -1;
     var tc = uniIsPublic(u) ? 'mp__badge--pub' : 'mp__badge--priv';
     var typeLabel = uniTypeLabel(u);
-    return '<div class="mp__uni__card" style="--c:' + u.color + '" data-id="' + u.id + '">' +
+    return '<div class="mp__uni__card mp__uni__card--v2" style="--c:' + u.color + '" data-id="' + u.id + '">' +
         '<div class="mp__card__top">' +
             '<div class="mp__card__abbr" style="background:' + u.color + '">' + u.abbr + '</div>' +
-            '<div style="flex:1;min-width:0">' +
+            '<div class="mp__card__head">' +
                 '<div class="mp__card__name">' + u.name + '</div>' +
                 '<div class="mp__card__badges">' +
                     '<span class="mp__badge mp__badge--city"><i class="fa-solid fa-location-dot" style="font-size:7px;margin-right:2px"></i>' + u.city + '</span>' +
                     '<span class="mp__badge ' + tc + '">' + typeLabel + '</span>' +
+                    chanceBadgeHTML(u) +
                 '</div>' +
             '</div>' +
             '<button class="mp__save__btn" data-id="' + u.id + '" style="color:' + (on ? 'rgb(228,155,20)' : 'rgba(0,0,0,.2)') + '">' +
                 '<i class="fa-' + (on ? 'solid' : 'regular') + ' fa-bookmark"></i>' +
             '</button>' +
         '</div>' +
-        '<hr class="mp__card__divider">' +
         '<div class="mp__card__metrics">' +
             metricBar('Tuition', uniTuitionLabel(u), u.ts) +
             metricBar('Difficulty', u.dl || '—', u.diff) +
         '</div>' +
-        '<hr class="mp__card__divider">' +
-        '<div class="mp__card__fields">' + (u.fields||[]).slice(0,4).map(function(f){ return '<span class="mp__field__tag">'+f+'</span>'; }).join('') + '</div>' +
-        '<div class="mp__card__langs">' + (u.langs||[]).map(function(l){ return '<span class="mp__lang__tag">'+l+'</span>'; }).join('') + '</div>' +
+        '<div class="mp__card__fields">' +
+            (u.fields||[]).slice(0,4).map(function(f){ return '<span class="mp__field__tag">'+f+'</span>'; }).join('') +
+            (u.langs||[]).map(function(l){ return '<span class="mp__field__tag mp__field__tag--lang"><i class="fa-solid fa-earth-europe"></i>'+l+'</span>'; }).join('') +
+        '</div>' +
+        (window.UniRating ? '<div class="mp__card__botrow"><div class="mp__card__rating">' + window.UniRating.compact(u) + '</div></div>' : '') +
     '</div>';
 }
 
@@ -282,6 +382,7 @@ function attachSave(container) {
             });
             renderSaved();
             updateStats();
+            if (window.renderChecklists) window.renderChecklists();
         });
     });
 }
@@ -320,6 +421,7 @@ function buildDetailCard(u, rank) {
             '<div class="cmp__detail__meta">' +
                 '<span class="mp__badge mp__badge--city"><i class="fa-solid fa-location-dot" style="font-size:7px;margin-right:2px"></i>' + u.city + '</span>' +
                 '<span class="mp__badge ' + tc + '">' + u.type + '</span>' +
+                chanceBadgeHTML(u) +
                 u.langs.map(function(l){ return '<span class="mp__badge mp__badge--city">' + l + '</span>'; }).join('') +
             '</div>' +
             '<div class="cmp__detail__grid">' +
@@ -330,6 +432,7 @@ function buildDetailCard(u, rank) {
                 '<div class="cmp__detail__metric"><span class="cmp__detail__ml">Fields of Study</span><span class="cmp__detail__mv" style="font-size:10px;line-height:1.5">' + u.fields.slice(0,3).join(', ') + (u.fields.length > 3 ? ' +' + (u.fields.length-3) + ' more' : '') + '</span></div>' +
                 '<div class="cmp__detail__metric"><span class="cmp__detail__ml">Degree Levels</span><span class="cmp__detail__mv" style="font-size:10px">Bachelor · Master · PhD</span></div>' +
             '</div>' +
+            (window.UniRating ? '<div class="cmp__detail__rating">' + window.UniRating.compact(u) + '</div>' : '') +
         '</div>' +
         '<div class="cmp__detail__actions">' +
             '<button class="mp__save__btn" data-id="' + u.id + '" title="' + (on?'Unsave':'Save') + '" style="color:' + (on ? 'rgb(228,155,20)' : 'rgba(0,0,0,.2)') + ';font-size:18px">' +
@@ -347,6 +450,8 @@ function getFilteredSorted() {
     var field= document.getElementById('fField').value;
     var type = document.getElementById('fType').value;
     var tuit = document.getElementById('fTuition').value;
+    var reachEl = document.getElementById('fReach');
+    var reach = reachEl ? reachEl.value : '';
     var sort = document.getElementById('cmpSort').value;
 
     var results = UNI.filter(function(u) {
@@ -354,6 +459,7 @@ function getFilteredSorted() {
         if (type  && u.type !== type)              return false;
         if (tuit  && u.ts   >  parseInt(tuit))     return false;
         if (field && u.fields.indexOf(field) === -1) return false;
+        if (reach) { var ci = uniChanceInfo(u); if (!ci || ci.label !== reach) return false; }
         if (q) {
             var haystack = (u.name + ' ' + u.city + ' ' + u.abbr + ' ' + u.fields.join(' ') + ' ' + u.langs.join(' ')).toLowerCase();
             if (haystack.indexOf(q) === -1) return false;
@@ -454,22 +560,91 @@ function renderCompare(keepPage) {
 }
 renderCompare();
 
-['cmpSearch','fCity','fField','fType','fTuition','cmpSort'].forEach(function(id) {
-    document.getElementById(id).addEventListener('input', renderCompare);
-    document.getElementById(id).addEventListener('change', renderCompare);
+['cmpSearch','fCity','fField','fType','fTuition','fReach','cmpSort'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener('input', renderCompare);
+    el.addEventListener('change', renderCompare);
 });
+
+// The "My chance" filter needs the student's grades — nudge them if missing.
+(function () {
+    var rEl = document.getElementById('fReach');
+    if (!rEl) return;
+    rEl.addEventListener('change', function () {
+        if (rEl.value && typeof studentGradePercent === 'function' && studentGradePercent() == null) {
+            var b = document.createElement('div');
+            b.style.cssText = 'position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:6000;padding:11px 18px;border-radius:11px;font-family:Montserrat,sans-serif;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(135deg,#d97c14,#f59220);box-shadow:0 10px 30px rgba(0,0,0,.25)';
+            b.innerHTML = '<i class="fa-solid fa-bullseye"></i> Add your grades in Gradebook to filter by admission chance';
+            document.body.appendChild(b);
+            setTimeout(function () { b.style.transition = 'opacity .4s'; b.style.opacity = '0'; setTimeout(function () { b.remove(); }, 400); }, 2600);
+        }
+    });
+}());
+
+/* ── "Use for Gradebook": save the chosen Explore filters for the Gradebook ──
+   While active, the current filters (city/field/type/budget) are saved and used
+   by the Gradebook's "realistic options". */
+(function () {
+    var btn = document.getElementById('expSaveGbBtn');
+    if (!btn) return;
+    var ON_KEY = 'us_gb_filters_on_' + user.id;
+    var isOn = function () { return localStorage.getItem(ON_KEY) === '1'; };
+
+    function captureFilters() {
+        return {
+            kind:    'filters',
+            city:    document.getElementById('fCity').value || '',
+            field:   document.getElementById('fField').value || '',
+            type:    document.getElementById('fType').value || '',
+            tuition: document.getElementById('fTuition').value || '',
+            budget:  budgetFilterOn ? (getProfile().budget || '') : ''
+        };
+    }
+    function paint() {
+        var on = isOn();
+        btn.classList.toggle('exp__savegb__btn--on', on);
+        var span = btn.querySelector('span');
+        if (span) span.textContent = on ? 'Saving to Gradebook' : 'Use for Gradebook';
+    }
+    // Re-capture whenever filters change while active.
+    window.gbCaptureIfOn = function () { if (isOn()) setGbFilters(captureFilters()); };
+    ['fCity','fField','fType','fTuition','cmpSearch'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) { el.addEventListener('change', window.gbCaptureIfOn); el.addEventListener('input', window.gbCaptureIfOn); }
+    });
+
+    btn.addEventListener('click', function () {
+        var next = !isOn();
+        localStorage.setItem(ON_KEY, next ? '1' : '0');
+        if (next) { setGbFilters(captureFilters()); toastMini('Filters saved for your Gradebook'); }
+        else { setGbFilters(null); toastMini('Gradebook filters cleared'); }
+        paint();
+    });
+    paint();
+
+    function toastMini(msg) {
+        var b = document.createElement('div');
+        b.style.cssText = 'position:fixed;top:18px;left:50%;transform:translateX(-50%);z-index:6000;padding:11px 18px;border-radius:11px;font-family:Montserrat,sans-serif;font-size:13px;font-weight:700;color:#fff;background:linear-gradient(135deg,#d97c14,#f59220);box-shadow:0 10px 30px rgba(0,0,0,.25)';
+        b.innerHTML = '<i class="fa-solid fa-graduation-cap"></i> ' + msg;
+        document.body.appendChild(b);
+        setTimeout(function () { b.style.transition = 'opacity .4s'; b.style.opacity = '0'; setTimeout(function () { b.remove(); }, 400); }, 2200);
+    }
+}());
 document.getElementById('cmpClear').addEventListener('click', function() {
-    ['cmpSearch','fCity','fField','fType','fTuition'].forEach(function(id) {
-        document.getElementById(id).value = '';
+    ['cmpSearch','fCity','fField','fType','fTuition','fReach'].forEach(function(id) {
+        var el = document.getElementById(id); if (el) el.value = '';
     });
     document.getElementById('cmpSort').value = 'tuition-asc';
     setBudgetMode(false);
     cmpPage = 1;
     renderCompare();
+    if (window.gbCaptureIfOn) window.gbCaptureIfOn();
 });
 
 document.getElementById('budgetFilterBtn').addEventListener('click', function() {
     setBudgetMode(!budgetFilterOn);
+    if (window.gbCaptureIfOn) window.gbCaptureIfOn();
 });
 
 (function() {
@@ -517,6 +692,69 @@ function uniTuitionLabel(u) {
     if (typeof u.tuition === 'string' && u.tuition.length > 1) return u.tuition;
     var cost = TS_COST[u.ts];
     return cost ? '~€' + cost.toLocaleString() + '/yr' : '—';
+}
+
+/* ══════════════ True Cost & ROI — estimation helpers ══════════════
+ * Tuition and city living-costs come from real data; salaries, scholarships,
+ * visa/insurance and any missing living-costs are ESTIMATED via heuristics
+ * (country × field × prestige) and always surfaced to the user as estimates. */
+
+// Average of all numbers in a money string, e.g. "€900–1,400/mo" → 1150.
+function moneyRangeMid(str) {
+    if (!str || typeof str !== 'string') return 0;
+    var nums = (str.replace(/[,\s]/g, '').match(/\d+/g) || []).map(Number);
+    if (!nums.length) return 0;
+    return nums.reduce(function (a, b) { return a + b; }, 0) / nums.length;
+}
+
+// Mid-point annual tuition (falls back to the min parser / tier cost).
+function tuitionMidCost(u) {
+    var mid = moneyRangeMid(u && u.tuition);
+    return mid > 0 ? Math.round(mid) : tuitionMinCost(u);
+}
+
+var CURRENCY_BY_CODE = { es:'€', fr:'€', de:'€', it:'€', pt:'€', nl:'€', be:'€', ie:'€',
+    fi:'€', gb:'£', us:'$', ch:'CHF ', ua:'₴', dk:'kr ', se:'kr ' };
+function currencySymFor(code) { return CURRENCY_BY_CODE[code] || '€'; }
+
+// Relative salary level of each country vs a mid-European baseline.
+var COUNTRY_SALARY_MULT = { us:1.70, ch:1.90, gb:1.30, ie:1.32, nl:1.22, de:1.25,
+    se:1.25, dk:1.28, fi:1.20, be:1.18, fr:1.10, it:0.92, es:0.85, pt:0.80, ua:0.45 };
+// Annual living-cost fallback (€) when a city has no cost data.
+var COUNTRY_LIVING_FALLBACK = { ch:18000, us:16000, gb:15000, ie:14500, dk:14000,
+    se:13000, nl:13500, fi:12500, de:12000, be:11500, fr:12500, it:10500,
+    es:9500, pt:9000, ua:5000 };
+// Estimated annual visa + health-insurance overhead for an international student (€).
+var COUNTRY_VISA_INS = { us:2600, ch:1700, gb:1600, ie:1300, se:1000, dk:1000,
+    fi:1000, nl:1100, de:900, be:900, fr:900, it:900, es:850, pt:800, ua:500 };
+
+function countryOf(u) {
+    return (u && (u.country_code || u.cc || currentCountryCode) || currentCountryCode || 'es').toLowerCase();
+}
+
+// Annual living cost for a uni's city (real city data → fallback by country).
+function cityLivingAnnual(u) {
+    var info = (typeof CITY_INFO !== 'undefined' && u && u.city) ? CITY_INFO[u.city] : null;
+    var monthly = info ? moneyRangeMid(info.cost) : 0;
+    if (monthly > 0) return Math.round(monthly * 12);
+    return COUNTRY_LIVING_FALLBACK[countryOf(u)] || 11000;
+}
+
+// Estimated starting graduate salary = field base × country level × prestige.
+function estStartingSalary(u, field) {
+    var base = ROI_FIELD_SALARY[field] || 35000;
+    var cMult = COUNTRY_SALARY_MULT[countryOf(u)] || 1.0;
+    var diff = (u && u.diff) || 3;
+    var prestige = ({ 1:0.85, 2:0.92, 3:1.0, 4:1.12, 5:1.25 })[diff] || 1.0;
+    return Math.round(base * cMult * prestige / 100) * 100;
+}
+
+// Estimated scholarship/aid as a fraction of tuition (potential, not guaranteed).
+function estScholarshipRate(u) {
+    var rate = uniIsPublic(u) ? 0.15 : 0.25;
+    var diff = (u && u.diff) || 3;
+    if (diff >= 5) rate += 0.15; else if (diff === 4) rate += 0.08;
+    return Math.min(0.45, rate);
 }
 function uniIsPublic(u) { return (u.type || '').toLowerCase() === 'public'; }
 function uniTypeLabel(u) { var t = u.type || ''; return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase(); }
@@ -2822,7 +3060,7 @@ function registerUnis(list) {
     try { reg = JSON.parse(localStorage.getItem(UNI_REGISTRY_KEY) || '{}'); } catch (e) { reg = {}; }
     list.forEach(function (u) {
         if (!u || !u.id) return;
-        reg[u.id] = { id: u.id, name: u.name, abbr: u.abbr, color: u.color, diff: u.diff, dl: u.dl, fields: u.fields };
+        reg[u.id] = { id: u.id, name: u.name, abbr: u.abbr, color: u.color, diff: u.diff, dl: u.dl, fields: u.fields, cc: u.country_code || u.cc || currentCountryCode };
     });
     try { localStorage.setItem(UNI_REGISTRY_KEY, JSON.stringify(reg)); } catch (e) {}
 }
@@ -2867,6 +3105,7 @@ function applyCountryData(code, data, gen) {
         var nameEl   = document.getElementById('headerCountryName');
         var flagCode = data.meta.flag || data.meta.code || code;
         var countryName = data.meta.name || data.meta.country || code.toUpperCase();
+        if (typeof renderVisaGuide === 'function') renderVisaGuide(code, countryName);
         if (flagEl)   flagEl.className       = 'mp__header__fi fi fi-' + flagCode;
         if (nameEl)   nameEl.textContent     = countryName;
         if (flagWrap) flagWrap.style.display = 'flex';
@@ -2889,7 +3128,7 @@ function applyCountryData(code, data, gen) {
         if (insightPct) insightPct.textContent = UNI.length;
         if (insightUni) insightUni.textContent = 'universities in ' + countryName;
         var hTotal = document.getElementById('heroStatTotal');
-        if (hTotal) hTotal.textContent = UNI.length;
+        if (hTotal) countUpStat(hTotal, UNI.length);
 
         var statUniEl  = document.getElementById('statUnis');
         var statCityEl = document.getElementById('statCities');
@@ -3231,6 +3470,14 @@ function getVisibleDeadlines() {
     return all;
 }
 
+// Initials from a personal-reminder title (so its badge shows the name, not a ★).
+function dlInitials(title) {
+    var words = String(title || '').trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return '★';
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+}
+
 function buildDeadlineCard(d) {
     var cd  = getCountdown(d.date);
     var dt  = DEADLINE_TYPES[d.type] || DEADLINE_TYPES.other;
@@ -3239,7 +3486,8 @@ function buildDeadlineCard(d) {
     var isPinned = getDlPin() === d.id;
     var cdCls = 'dl__cd--' + (d.done ? 'done' : cd.urgency);
     var uniDisplay = d.uniName || 'Personal Reminder';
-    var abbr = (d.uniAbbr || '★').slice(0, 4);
+    // Use the university abbreviation, or initials of the reminder's own name.
+    var abbr = (d.uniAbbr || dlInitials(d.title)).slice(0, 4);
 
     var cdNum = d.done ? '✓' : (cd.days === 0 ? '!' : Math.abs(cd.days));
     var cdLbl = d.done ? 'Done' : cd.label;
@@ -3250,7 +3498,7 @@ function buildDeadlineCard(d) {
         '</button>' +
         '<div class="dl__card__body">' +
             '<div class="dl__card__meta">' +
-                '<div class="dl__card__abbr" style="background:' + d.uniColor + '">' + abbr + '</div>' +
+                '<div class="dl__card__abbr" style="background:' + (d.uniColor || dt.color) + '">' + abbr + '</div>' +
                 '<span class="dl__card__uname">' + uniDisplay + '</span>' +
                 '<span class="dl__type__badge" style="background:' + dt.bg + ';color:' + dt.color + '">' +
                     '<i class="' + dt.icon + '"></i> ' + dt.label +
@@ -3417,6 +3665,8 @@ function renderDeadlines() {
             renderDeadlines();
         });
     });
+
+    if (window.renderChecklists) window.renderChecklists();
 }
 
 document.querySelectorAll('.dl__cat').forEach(function(btn) {
@@ -3428,6 +3678,99 @@ document.querySelectorAll('.dl__cat').forEach(function(btn) {
     });
 });
 
+/* ══════════════ Document & requirements checklist ══════════════
+ * One checklist per saved/target university. Self-contained — checks persist
+ * in localStorage. Some items are conditional (SAT for the US, portfolio for arts). */
+var CHECKLIST_KEY = 'us_checklist_' + user.id;
+function getChecklist() { try { return JSON.parse(localStorage.getItem(CHECKLIST_KEY) || '{}'); } catch (e) { return {}; } }
+function setChecklist(d) { try { localStorage.setItem(CHECKLIST_KEY, JSON.stringify(d)); } catch (e) {} }
+
+var CKL_BASE = [
+    { key:'form',        icon:'fa-file-lines',      label:'Application form completed' },
+    { key:'transcript',  icon:'fa-graduation-cap',  label:'Academic transcripts' },
+    { key:'sop',         icon:'fa-pen-fancy',       label:'Personal statement / motivation letter' },
+    { key:'rec1',        icon:'fa-envelope',        label:'Recommendation letter #1' },
+    { key:'rec2',        icon:'fa-envelope-open-text', label:'Recommendation letter #2' },
+    { key:'cv',          icon:'fa-id-card',         label:'CV / résumé' },
+    { key:'passport',    icon:'fa-passport',        label:'Passport / ID copy' },
+    { key:'english',     icon:'fa-language',        label:'English test (IELTS / TOEFL)' },
+    { key:'fee',         icon:'fa-coins',           label:'Application fee paid' }
+];
+function checklistItemsFor(u) {
+    var items = CKL_BASE.slice();
+    var cc = (u && u.cc ? String(u.cc).toLowerCase() : '');
+    if (cc === 'us') items.splice(7, 0, { key:'sat', icon:'fa-square-poll-vertical', label:'Standardised test (SAT / ACT / GRE)' });
+    var fields = (u && u.fields ? u.fields.join(' ').toLowerCase() : '');
+    if (/art|design|architect|music|film|fashion/.test(fields)) {
+        items.push({ key:'portfolio', icon:'fa-palette', label:'Portfolio / audition material' });
+    }
+    return items;
+}
+function resolveUni(id) {
+    var u = (typeof UNI !== 'undefined') ? UNI.find(function (x) { return x.id === id; }) : null;
+    return u || (window.uniFromRegistry ? window.uniFromRegistry(id) : null);
+}
+
+function renderChecklists() {
+    var box = document.getElementById('dlChecklist');
+    if (!box) return;
+    var saved = getSaved();
+    if (!saved.length) {
+        box.innerHTML = '<div class="ckl__empty"><i class="fa-regular fa-square-check"></i>' +
+            '<p>Save universities to get a tailored document checklist for each application.</p></div>';
+        return;
+    }
+    var state = getChecklist();
+    box.innerHTML = saved.map(function (id) {
+        var u = resolveUni(id);
+        if (!u) return '';
+        var items = checklistItemsFor(u);
+        var st = state[id] || {};
+        var done = items.filter(function (it) { return st[it.key]; }).length;
+        var pctNum = Math.round(done / items.length * 100);
+        var ringColor = pctNum === 100 ? '#27ae60' : pctNum >= 50 ? '#d97c14' : '#e67e22';
+        return '<div class="ckl__card" data-uid="' + id + '">' +
+            '<div class="ckl__hd">' +
+                '<span class="ckl__logo" style="background:' + (u.color || '#d97c14') + '">' + (u.abbr || (u.name || '?').slice(0,2).toUpperCase()) + '</span>' +
+                '<div class="ckl__hd__info">' +
+                    '<div class="ckl__name">' + (u.name || id) + '</div>' +
+                    '<div class="ckl__prog__lbl"><span style="color:' + ringColor + '">' + done + '/' + items.length + '</span> documents ready</div>' +
+                '</div>' +
+                '<div class="ckl__ring" style="--p:' + pctNum + ';--rc:' + ringColor + '"><span>' + pctNum + '%</span></div>' +
+            '</div>' +
+            '<div class="ckl__items">' +
+                items.map(function (it) {
+                    var on = !!st[it.key];
+                    return '<button class="ckl__item' + (on ? ' ckl__item--on' : '') + '" data-key="' + it.key + '">' +
+                        '<span class="ckl__check"><i class="fa-solid ' + (on ? 'fa-circle-check' : 'fa-circle') + '"></i></span>' +
+                        '<i class="ckl__item__icon fa-solid ' + it.icon + '"></i>' +
+                        '<span class="ckl__item__lbl">' + it.label + '</span>' +
+                    '</button>';
+                }).join('') +
+            '</div>' +
+        '</div>';
+    }).join('') || '<div class="ckl__empty"><i class="fa-regular fa-square-check"></i><p>Save universities to build your checklist.</p></div>';
+}
+window.renderChecklists = renderChecklists;
+
+// Toggle a checklist item (event delegation).
+(function () {
+    var box = document.getElementById('dlChecklist');
+    if (!box) return;
+    box.addEventListener('click', function (e) {
+        var item = e.target.closest('.ckl__item');
+        if (!item) return;
+        var card = item.closest('.ckl__card');
+        var uid = card && card.dataset.uid, key = item.dataset.key;
+        if (!uid || !key) return;
+        var state = getChecklist();
+        state[uid] = state[uid] || {};
+        state[uid][key] = !state[uid][key];
+        setChecklist(state);
+        renderChecklists();
+    });
+}());
+
 var dlSavedOnlyEl = document.getElementById('dlSavedOnly');
 if (dlSavedOnlyEl) {
     dlSavedOnlyEl.addEventListener('change', function() {
@@ -3438,11 +3781,26 @@ if (dlSavedOnlyEl) {
 
 var dlAddOverlay = document.getElementById('dlAddOverlay');
 
+var DL_TITLE_MAX = 50;
+function updateDlTitleCount() {
+    var inp = document.getElementById('dlTitle');
+    var c = document.getElementById('dlTitleCount');
+    if (!inp || !c) return;
+    var n = inp.value.length;
+    c.textContent = n + '/' + DL_TITLE_MAX;
+    c.classList.toggle('mp__modal__count--full', n >= DL_TITLE_MAX);
+}
+(function () {
+    var inp = document.getElementById('dlTitle');
+    if (inp) inp.addEventListener('input', updateDlTitleCount);
+}());
+
 function openDlModal() {
     dlAddOverlay.classList.add('open');
     var today = new Date().toISOString().split('T')[0];
     document.getElementById('dlDate').min = today;
     document.getElementById('dlDate').value = '';
+    updateDlTitleCount();
 }
 function closeDlModal() {
     dlAddOverlay.classList.remove('open');
@@ -3489,7 +3847,7 @@ dlAddOverlay.addEventListener('click', function(e) { if (e.target === dlAddOverl
 }());
 
 document.getElementById('dlAddSave').addEventListener('click', function() {
-    var title = document.getElementById('dlTitle').value.trim();
+    var title = document.getElementById('dlTitle').value.trim().slice(0, DL_TITLE_MAX);
     var type  = document.getElementById('dlType').value;
     var uni   = document.getElementById('dlUniName').value.trim();
     var date  = document.getElementById('dlDate').value;
@@ -3568,18 +3926,7 @@ var FIELD_BONUS = {
     arts:        { p3:-8,  p5:-12, p10:-6,  p30:-1  },
 };
 
-var ADM_PARAMS = {
-    1: { thresh:30, k:0.12 },
-    2: { thresh:50, k:0.16 },
-    3: { thresh:65, k:0.22 },
-    4: { thresh:75, k:0.30 },
-    5: { thresh:82, k:0.40 },
-};
-
-function cap(v) { return Math.min(99, Math.max(1, Math.round(v))); }
-function sigmoid(grade, thresh, k) {
-    return Math.round(100 / (1 + Math.exp(-k * (grade - thresh))));
-}
+/* ADM_PARAMS, cap() and sigmoid() are defined earlier (near the chance helpers). */
 
 function populateInsightSelects() {
 
@@ -3632,30 +3979,33 @@ document.getElementById('salCalcBtn').addEventListener('click', function() {
     ];
 
     resultEl.innerHTML =
-        '<div class="ins__sal__header">' +
-            '<div class="ins__sal__uni">' + uniName + '</div>' +
-            '<div class="ins__sal__field"><i class="fa-solid fa-briefcase"></i> ' + fieldLabel + '</div>' +
-        '</div>' +
-        '<div class="ins__sal__source">Based on graduate employment outcome surveys (INE, HESA, AlmaLaurea, CEREQ, DAAD, 2023)</div>' +
-        brackets.map(function(b) {
-            var fill = b.pct;
-            var barColor = b.pct >= 80 ? '#27ae60' : b.pct >= 55 ? '#2980b9' : b.pct >= 30 ? '#d97c14' : '#e74c3c';
-            var conf = b.pct >= 75 ? 'High likelihood' : b.pct >= 45 ? 'Moderate likelihood' : b.pct >= 20 ? 'Lower likelihood' : 'Rare outcome';
-            return '<div class="ins__sal__row">' +
-                '<div class="ins__sal__row__top">' +
-                    '<div class="ins__sal__icon" style="color:' + b.color + '"><i class="' + b.icon + '"></i></div>' +
-                    '<div class="ins__sal__info">' +
-                        '<div class="ins__sal__label">' + b.label + '</div>' +
-                        '<div class="ins__sal__sub">' + b.sub + '</div>' +
-                    '</div>' +
-                    '<div class="ins__sal__pct" style="color:' + barColor + '">' + fill + '%</div>' +
+        '<div class="rzt rzt--sal" style="--a:#27ae60">' +
+            '<button class="rzt__close ins__res__close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>' +
+            '<div class="rzt__head">' +
+                '<span class="rzt__badge"><i class="fa-solid fa-chart-line"></i></span>' +
+                '<div class="rzt__head__txt">' +
+                    '<div class="rzt__eyebrow">Salary outlook</div>' +
+                    '<h3 class="rzt__title">' + uniName + '</h3>' +
+                    '<div class="rzt__meta"><i class="fa-solid fa-briefcase"></i> ' + fieldLabel + '</div>' +
                 '</div>' +
-                '<div class="ins__sal__bar__track">' +
-                    '<div class="ins__sal__bar__fill" style="width:' + fill + '%;background:' + barColor + '"></div>' +
-                '</div>' +
-                '<div class="ins__sal__conf">' + conf + '</div>' +
-            '</div>';
-        }).join('');
+            '</div>' +
+            '<div class="rzt__brackets">' +
+                brackets.map(function (b, i) {
+                    var barColor = b.pct >= 80 ? '#27ae60' : b.pct >= 55 ? '#2980b9' : b.pct >= 30 ? '#d97c14' : '#e74c3c';
+                    var conf = b.pct >= 75 ? 'High likelihood' : b.pct >= 45 ? 'Moderate likelihood' : b.pct >= 20 ? 'Lower likelihood' : 'Rare outcome';
+                    return '<div class="rzt__brk" style="--d:' + (i * 90 + 120) + 'ms">' +
+                        '<div class="rzt__brk__top">' +
+                            '<span class="rzt__brk__ic" style="color:' + b.color + ';background:' + b.color + '15"><i class="' + b.icon + '"></i></span>' +
+                            '<div class="rzt__brk__txt"><div class="rzt__brk__label">' + b.label + '</div><div class="rzt__brk__sub">' + b.sub + '</div></div>' +
+                            '<div class="rzt__brk__pct" style="color:' + barColor + '">' + b.pct + '<small>%</small></div>' +
+                        '</div>' +
+                        '<div class="rzt__bar"><i style="width:' + b.pct + '%;background:linear-gradient(90deg,' + b.color + ',' + barColor + ')"></i></div>' +
+                        '<div class="rzt__brk__conf">' + conf + '</div>' +
+                    '</div>';
+                }).join('') +
+            '</div>' +
+            '<p class="rzt__src"><i class="fa-solid fa-circle-info"></i> Based on graduate employment outcome surveys (INE, HESA, AlmaLaurea, CEREQ, DAAD, 2023)</p>' +
+        '</div>';
 });
 
 var admSystemEl = document.getElementById('admSystem');
@@ -3686,6 +4036,29 @@ function toPercent(sys, raw) {
     if (sys === 'alevels') return raw;
     return raw;
 }
+
+// "Use my gradebook average" — prefill the admission calc from the student's grades.
+(function () {
+    var btn = document.getElementById('admUseGrades');
+    if (!btn) return;
+    function sync() {
+        var g = studentGradePercent();
+        if (g == null) { btn.style.display = 'none'; return; }
+        btn.style.display = '';
+        btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Use my gradebook average (' + Math.round(g) + '%)';
+    }
+    sync();
+    window.syncAdmUseGrades = sync;   // refreshed when the Probability tab opens
+    btn.addEventListener('click', function () {
+        var g = studentGradePercent();
+        if (g == null) return;
+        var sysSel = document.getElementById('admSystem');
+        sysSel.value = 'pct';
+        sysSel.dispatchEvent(new Event('change'));   // reveal the % field, hide A-level field
+        document.getElementById('admGrade').value = Math.round(g);
+        document.getElementById('admCalcBtn').click();
+    });
+}());
 
 document.getElementById('admCalcBtn').addEventListener('click', function() {
     var uniId   = document.getElementById('admUni').value;
@@ -3719,43 +4092,49 @@ document.getElementById('admCalcBtn').addEventListener('click', function() {
     var conf = prob >= 80 ? 'High likelihood' : prob >= 55 ? 'Good likelihood' : prob >= 35 ? 'Competitive' : 'Long shot';
 
     resultEl.innerHTML =
-        '<div class="ins__sal__header">' +
-            '<div class="ins__sal__uni">' + uni.name + '</div>' +
-            '<div class="ins__sal__field"><i class="fa-solid fa-graduation-cap"></i> ' + uni.dl + ' &middot; ' + sysLabel + '</div>' +
-        '</div>' +
-        '<div class="ins__sal__source">Estimated from your grade against this university\'s typical entry profile</div>' +
-        '<div class="ins__sal__row">' +
-            '<div class="ins__sal__row__top">' +
-                '<div class="ins__sal__icon" style="color:' + verdictColor + '"><i class="fa-solid fa-percent"></i></div>' +
-                '<div class="ins__sal__info">' +
-                    '<div class="ins__sal__label">Estimated admission chance</div>' +
-                    '<div class="ins__sal__sub">' + verdict + '</div>' +
+        '<div class="rzt rzt--adm" style="--a:' + verdictColor + '">' +
+            '<button class="rzt__close ins__res__close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>' +
+            '<div class="rzt__adm__hero">' +
+                '<div class="rzt__ring" style="--p:' + prob + ';--c:' + verdictColor + '">' +
+                    '<div class="rzt__ring__in"><b style="color:' + verdictColor + '">' + prob + '<i>%</i></b><small>chance</small></div>' +
                 '</div>' +
-                '<div class="ins__sal__pct" style="color:' + verdictColor + '">' + prob + '%</div>' +
+                '<div class="rzt__adm__txt">' +
+                    '<div class="rzt__eyebrow">Admission chance</div>' +
+                    '<h3 class="rzt__title">' + uni.name + '</h3>' +
+                    '<span class="rzt__pill" style="color:' + verdictColor + ';background:' + verdictColor + '18;border-color:' + verdictColor + '40">' + verdict + '</span>' +
+                    '<div class="rzt__meta"><i class="fa-solid fa-graduation-cap"></i> ' + uni.dl + ' &middot; ' + sysLabel + '</div>' +
+                '</div>' +
             '</div>' +
-            '<div class="ins__sal__bar__track">' +
-                '<div class="ins__sal__bar__fill" style="width:' + prob + '%;background:' + verdictColor + '"></div>' +
+            '<p class="rzt__advice"><b>' + conf + '</b> — ' + advice + '</p>' +
+            '<div class="rzt__actions">' +
+                '<button class="rzt__btn rzt__btn--primary ins__save__hero__btn" ' +
+                    'data-uid="'           + uniId        + '" ' +
+                    'data-name="'          + uni.name      + '" ' +
+                    'data-color="'         + uni.color     + '" ' +
+                    'data-prob="'          + prob          + '" ' +
+                    'data-verdict="'       + verdict       + '" ' +
+                    'data-verdict-color="' + verdictColor  + '" ' +
+                    'data-grade="'         + sysLabel      + '">' +
+                    '<i class="fa-solid fa-bookmark"></i> Save result' +
+                '</button>' +
+                '<a class="rzt__btn rzt__btn--ghost" href="applicationForm.html?uni=' + uniId + '">' +
+                    '<i class="fa-solid fa-file-signature"></i> Apply' +
+                '</a>' +
             '</div>' +
-            '<div class="ins__sal__conf">' + conf + ' — ' + advice + '</div>' +
-        '</div>' +
-        '<div class="adm2__actions">' +
-            '<button class="adm2__btn adm2__btn--save ins__save__hero__btn" ' +
-                'data-uid="'           + uniId        + '" ' +
-                'data-name="'          + uni.name      + '" ' +
-                'data-color="'         + uni.color     + '" ' +
-                'data-prob="'          + prob          + '" ' +
-                'data-verdict="'       + verdict       + '" ' +
-                'data-verdict-color="' + verdictColor  + '" ' +
-                'data-grade="'         + sysLabel      + '">' +
-                '<i class="fa-solid fa-bookmark"></i> Save' +
-            '</button>' +
-            '<a class="adm2__btn adm2__btn--apply" href="applicationForm.html?uni=' + uniId + '">' +
-                '<i class="fa-solid fa-file-signature"></i> Apply' +
-            '</a>' +
         '</div>';
 });
 
 populateInsightSelects();
+
+/* Close button on calculated result cards → restore the original placeholder. */
+['admResult', 'salResult', 'roiResult'].forEach(function (id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    var placeholder = el.innerHTML;   // the photo brand card shown before Calculate
+    el.addEventListener('click', function (e) {
+        if (e.target.closest('.ins__res__close')) el.innerHTML = placeholder;
+    });
+});
 
 /* ── ROI / "Is it worth it?" calculator ── */
 var ROI_FIELD_SALARY = { cs:42000, engineering:40000, finance:38000, medicine:48000, law:36000, science:34000, arts:28000 };
@@ -3777,33 +4156,80 @@ var ROI_DEGREE = { bachelor:{ y:4, label:"Bachelor's" }, master:{ y:2, label:"Ma
 
         var deg   = ROI_DEGREE[document.getElementById('roiDegree').value] || ROI_DEGREE.bachelor;
         var field = document.getElementById('roiField').value;
-        var annualTuition = (typeof tuitionMinCost === 'function') ? tuitionMinCost(u) : 3000;
-        var totalCost = annualTuition * deg.y;
-        var salary    = ROI_FIELD_SALARY[field] || 35000;
-        var payback   = salary > 0 ? totalCost / salary : 0;
+        var cur   = currencySymFor(countryOf(u));
+        var money = function (n) { return cur + Math.round(n).toLocaleString(); };
+
+        // ── Cost side (per year × degree length) ──
+        var annualTuition = tuitionMidCost(u);
+        var annualLiving  = cityLivingAnnual(u);
+        var annualExtra   = COUNTRY_VISA_INS[countryOf(u)] || 1000;   // visa + insurance
+        var years         = deg.y;
+        var totalTuition  = annualTuition * years;
+        var totalLiving   = annualLiving  * years;
+        var totalExtra    = annualExtra   * years;
+        var grossTotal    = totalTuition + totalLiving + totalExtra;
+
+        var scholRate    = estScholarshipRate(u);
+        var scholSaving  = Math.round(totalTuition * scholRate);
+        var netTotal     = grossTotal - scholSaving;
+
+        // ── Return side ──
+        var salary    = estStartingSalary(u, field);
+        var payback   = salary > 0 ? netTotal / salary : 0;
+        // Rough 10-year net position (graduate premium ≈ 35% of salary is "extra").
+        var tenYearGain = Math.round(salary * 0.35 * 10 - netTotal);
 
         var cls, verdict;
-        if (payback < 1.5)      { cls = 'fast'; verdict = 'Excellent value'; }
-        else if (payback < 3)   { cls = 'good'; verdict = 'Good value'; }
-        else if (payback < 5)   { cls = 'mid';  verdict = 'Moderate value'; }
+        if (payback < 2)        { cls = 'fast'; verdict = 'Excellent value'; }
+        else if (payback < 3.5) { cls = 'good'; verdict = 'Good value'; }
+        else if (payback < 5.5) { cls = 'mid';  verdict = 'Moderate value'; }
         else                    { cls = 'slow'; verdict = 'Slow to pay off'; }
 
         var fieldLabel = ROI_FIELD_LABEL[field] || 'All fields (average)';
+        var cityLabel  = u.city ? (' · ' + u.city) : '';
+        // Breakdown-bar segment widths (of gross, before scholarship).
+        var pct = function (n) { return (grossTotal > 0 ? (n / grossTotal * 100) : 0).toFixed(1); };
 
+        var pcVal = { fast: '#27ae60', good: '#2980b9', mid: '#e8850a', slow: '#e74c3c' }[cls];
         resultEl.innerHTML =
-            '<div class="ins__sal__header">' +
-                '<div class="ins__sal__uni">' + (u.name || uniId) + '</div>' +
-                '<div class="ins__sal__field"><i class="fa-solid fa-graduation-cap"></i> ' + deg.label + ' · ' + fieldLabel + '</div>' +
-            '</div>' +
-            '<div class="roi__result__grid">' +
-                '<div class="roi__stat"><div class="roi__stat__lbl"><i class="fa-solid fa-coins"></i> Total Cost</div><div class="roi__stat__val">€' + totalCost.toLocaleString() + '</div></div>' +
-                '<div class="roi__stat"><div class="roi__stat__lbl"><i class="fa-solid fa-sack-dollar"></i> Avg. Salary</div><div class="roi__stat__val">€' + salary.toLocaleString() + '<span style="font-size:11px;color:var(--text3);font-weight:600">/yr</span></div></div>' +
-            '</div>' +
-            '<div class="roi__payback roi__payback--' + cls + '">' +
-                '<div class="roi__payback__num">' + payback.toFixed(1) + ' years</div>' +
-                '<div class="roi__payback__lbl">until the degree pays for itself · ' + verdict + '</div>' +
-            '</div>' +
-            '<p class="roi__note"><i class="fa-solid fa-circle-info"></i> Payback time = total cost ÷ average annual salary. Estimates based on typical tuition and graduate earnings.</p>';
+            '<div class="rzt rzt--roi" style="--a:' + pcVal + '">' +
+                '<button class="rzt__close ins__res__close" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>' +
+                '<div class="rzt__head">' +
+                    '<span class="rzt__badge"><i class="fa-solid fa-scale-balanced"></i></span>' +
+                    '<div class="rzt__head__txt">' +
+                        '<div class="rzt__eyebrow">Cost &amp; ROI · ' + years + ' year' + (years > 1 ? 's' : '') + '</div>' +
+                        '<h3 class="rzt__title">' + (u.name || uniId) + '</h3>' +
+                        '<div class="rzt__meta"><i class="fa-solid fa-graduation-cap"></i> ' + deg.label + ' · ' + fieldLabel + cityLabel + '</div>' +
+                    '</div>' +
+                '</div>' +
+
+                '<div class="rzt__payback">' +
+                    '<div class="rzt__payback__num">' + payback.toFixed(1) + '<small>yrs</small></div>' +
+                    '<div class="rzt__payback__txt"><div class="rzt__payback__lbl">' + verdict + '</div><div class="rzt__payback__sub">to earn back your net investment</div></div>' +
+                '</div>' +
+
+                '<div class="rzt__break">' +
+                    '<div class="rzt__break__bar">' +
+                        '<span class="rzt__seg" style="width:' + pct(totalTuition) + '%;--sc:#e8850a" title="Tuition"></span>' +
+                        '<span class="rzt__seg" style="width:' + pct(totalLiving)  + '%;--sc:#2980b9" title="Living"></span>' +
+                        '<span class="rzt__seg" style="width:' + pct(totalExtra)   + '%;--sc:#8e44ad" title="Visa & insurance"></span>' +
+                    '</div>' +
+                    '<div class="rzt__legend">' +
+                        '<span><i class="rzt__dot" style="background:#e8850a"></i> Tuition <b>' + money(totalTuition) + '</b></span>' +
+                        '<span><i class="rzt__dot" style="background:#2980b9"></i> Living <b>' + money(totalLiving) + '</b></span>' +
+                        '<span><i class="rzt__dot" style="background:#8e44ad"></i> Visa &amp; insurance <b>' + money(totalExtra) + '</b></span>' +
+                    '</div>' +
+                '</div>' +
+
+                '<div class="rzt__stats">' +
+                    '<div class="rzt__stat"><div class="rzt__stat__lbl"><i class="fa-solid fa-coins"></i> Net total cost</div><div class="rzt__stat__val">' + money(netTotal) + '</div></div>' +
+                    '<div class="rzt__stat"><div class="rzt__stat__lbl"><i class="fa-solid fa-sack-dollar"></i> Starting salary</div><div class="rzt__stat__val">' + money(salary) + '<small>/yr</small></div></div>' +
+                    '<div class="rzt__stat"><div class="rzt__stat__lbl" style="color:#27ae60"><i class="fa-solid fa-award"></i> Scholarship potential</div><div class="rzt__stat__val">−' + money(scholSaving) + '<small>~' + Math.round(scholRate * 100) + '%</small></div></div>' +
+                    '<div class="rzt__stat"><div class="rzt__stat__lbl"><i class="fa-solid fa-chart-line"></i> 10-yr net position</div><div class="rzt__stat__val" style="color:' + (tenYearGain >= 0 ? '#27ae60' : '#e74c3c') + '">' + (tenYearGain >= 0 ? '+' : '−') + money(Math.abs(tenYearGain)) + '</div></div>' +
+                '</div>' +
+
+                '<p class="rzt__src"><i class="fa-solid fa-circle-info"></i> Tuition &amp; living costs use real data; salary, scholarships &amp; visa/insurance are estimates. Payback = net cost ÷ starting salary. Guidance, not financial advice.</p>' +
+            '</div>';
     });
 }());
 
@@ -4472,6 +4898,85 @@ var csPickerOpen = false;
     updateCountryPickerMode();
 }());
 
+/* ══════════════ Visa & Logistics guide (curated per country) ══════════════
+ * Guidance for a typical non-EU/international student. Estimated & curated —
+ * always shown with a "verify with official sources" disclaimer. */
+var VISA_DATA = {
+    es: { visa: 'Student Visa (Tipo D)', need: 'EU/EEA: none. Non-EU: required for stays over 90 days', time: '4–8 weeks', cost: '~€80', work: 'Up to 30 hrs/week with a work permit', ins: 'Private health insurance required', post: 'Up to 12 months job-search permit after graduation', gov: 'exteriores.gob.es' },
+    fr: { visa: 'VLS-TS Student Long-Stay Visa', need: 'EU/EEA: none. Non-EU: required for stays over 90 days', time: '2–4 weeks (after Campus France)', cost: '~€99', work: 'Up to 964 hrs/year (~20 hrs/week)', ins: 'Free enrolment in French student health system', post: '12-month APS permit to find work', gov: 'france-visas.gouv.fr' },
+    de: { visa: 'National Visa (Type D) for study', need: 'EU/EEA: none. Non-EU: required', time: '6–12 weeks', cost: '~€75', work: '120 full / 240 half days per year', ins: 'Public/private health insurance mandatory (~€120/mo)', post: '18-month residence permit to seek work', gov: 'germany.info' },
+    it: { visa: 'Student Visa (Type D)', need: 'EU/EEA: none. Non-EU: required over 90 days', time: '3–6 weeks', cost: '~€50', work: 'Up to 20 hrs/week', ins: 'Health insurance required (SSN or private)', post: '12-month job-search permit', gov: 'vistoperitalia.esteri.it' },
+    pt: { visa: 'Student Residence Visa', need: 'EU/EEA: none. Non-EU: required', time: '2–4 weeks', cost: '~€90', work: 'Allowed alongside study', ins: 'Health insurance required', post: 'Job-search residence permit available', gov: 'vistos.mne.gov.pt' },
+    nl: { visa: 'Entry Visa (MVV) + residence permit', need: 'EU/EEA: none. Non-EU: usually required', time: '2–8 weeks (via university)', cost: '~€210', work: 'Up to 16 hrs/week (or full-time summer)', ins: 'Dutch health insurance required if working', post: '1-year "orientation year" (zoekjaar) permit', gov: 'ind.nl' },
+    ie: { visa: 'Irish Study Visa (Type D)', need: 'EU/EEA: none. Non-EU: often required', time: '4–8 weeks', cost: '~€60', work: 'Up to 20 hrs/week (40 in holidays)', ins: 'Private medical insurance required', post: 'Up to 2 years stay-back (Third Level Graduate Scheme)', gov: 'irishimmigration.ie' },
+    be: { visa: 'Student Visa (Type D)', need: 'EU/EEA: none. Non-EU: required over 90 days', time: '4–8 weeks', cost: '~€180', work: 'Up to 20 hrs/week during term', ins: 'Health insurance required', post: '12-month job-search residence permit', gov: 'dofi.ibz.be' },
+    fi: { visa: 'Student Residence Permit', need: 'EU/EEA: register only. Non-EU: required', time: '1–3 months', cost: '~€350', work: 'Up to 30 hrs/week', ins: 'Insurance required (amount depends on study length)', post: '2-year job-search residence permit', gov: 'migri.fi' },
+    gb: { visa: 'Student Visa (formerly Tier 4)', need: 'All international students (incl. EU since 2021)', time: '~3 weeks', cost: '£490 + £776/yr health surcharge', work: 'Up to 20 hrs/week during term', ins: 'NHS access via Immigration Health Surcharge', post: 'Graduate Route: 2 years (3 for PhD)', gov: 'gov.uk/student-visa' },
+    us: { visa: 'F-1 Student Visa', need: 'All international students', time: '3–8 weeks (after I-20 + SEVIS)', cost: '$185 + $350 SEVIS fee', work: 'On-campus only (20 hrs/week); CPT/OPT later', ins: 'Health insurance required (~$1,500–2,500/yr)', post: 'OPT: 12 months (+24 for STEM)', gov: 'travel.state.gov' },
+    ch: { visa: 'National Visa (Type D) for study', need: 'EU/EFTA: permit only. Non-EU: visa required', time: '8–12 weeks', cost: '~CHF 88', work: 'Up to 15 hrs/week during term', ins: 'Swiss health insurance mandatory (~CHF 250/mo)', post: '6-month permit to seek qualified work', gov: 'sem.admin.ch' },
+    ua: { visa: 'Long-term Type D Student Visa', need: 'Most non-CIS international students', time: '2–4 weeks', cost: '~$85', work: 'Restricted — generally not permitted on study visa', ins: 'Medical insurance required', post: 'Must apply separately for work permit', gov: 'mfa.gov.ua' },
+    dk: { visa: 'Student Residence Permit', need: 'EU/Nordic: none. Non-EU: required', time: '1–2 months', cost: '~DKK 1,900', work: 'Up to 20 hrs/week (full-time Jun–Aug)', ins: 'Covered by Danish health system once registered', post: '3-year establishment card to find work', gov: 'nyidanmark.dk' },
+    se: { visa: 'Residence Permit for Studies', need: 'EU/EEA: none. Non-EU: required', time: '1–3 months', cost: '~SEK 1,500', work: 'No fixed hour limit (studies must come first)', ins: 'Covered if enrolled 1+ year; else private', post: '12-month permit to seek work after graduation', gov: 'migrationsverket.se' }
+};
+
+function renderVisaGuide(code, countryName) {
+    var el = document.getElementById('cgVisaGuide');
+    if (!el) return;
+    var v = VISA_DATA[code];
+    if (!v) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    var rows = [
+        { ic: 'fa-passport',        lbl: 'Visa type',           val: v.visa },
+        { ic: 'fa-circle-question', lbl: 'Who needs it',        val: v.need },
+        { ic: 'fa-clock',           lbl: 'Processing time',     val: v.time },
+        { ic: 'fa-coins',           lbl: 'Application cost',     val: v.cost },
+        { ic: 'fa-briefcase',       lbl: 'Work while studying',  val: v.work },
+        { ic: 'fa-heart-pulse',     lbl: 'Health insurance',     val: v.ins },
+        { ic: 'fa-graduation-cap',  lbl: 'After graduation',     val: v.post }
+    ];
+    // Preserve open/closed state across re-renders (e.g. country change).
+    var wasOpen = el.classList.contains('visa--open');
+    el.innerHTML =
+        '<button class="visa__toggle" type="button" aria-expanded="' + (wasOpen ? 'true' : 'false') + '">' +
+            '<span class="visa__toggle__icon"><i class="fa-solid fa-passport"></i></span>' +
+            '<span class="visa__toggle__txt">' +
+                '<span class="visa__toggle__title">Visa &amp; Logistics — ' + countryName + '</span>' +
+                '<span class="visa__toggle__sub">Visas, work rights, insurance &amp; post-study options — tap to read</span>' +
+            '</span>' +
+            '<span class="visa__chev"><i class="fa-solid fa-chevron-down"></i></span>' +
+        '</button>' +
+        '<div class="visa__drawer">' +
+            '<div class="visa__drawer__inner">' +
+                '<div class="visa__grid">' +
+                    rows.map(function (r) {
+                        return '<div class="visa__item">' +
+                            '<span class="visa__item__icon"><i class="fa-solid ' + r.ic + '"></i></span>' +
+                            '<span class="visa__item__txt">' +
+                                '<span class="visa__item__lbl">' + r.lbl + '</span>' +
+                                '<span class="visa__item__val">' + r.val + '</span>' +
+                            '</span>' +
+                        '</div>';
+                    }).join('') +
+                '</div>' +
+                '<div class="visa__foot">' +
+                    (v.gov ? '<a class="visa__gov" href="https://' + v.gov + '" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Official government site</a>' : '') +
+                    '<p class="visa__note"><i class="fa-solid fa-circle-info"></i> Curated guidance for a typical international student — rules vary by nationality and change often. Always confirm with the official source before applying.</p>' +
+                '</div>' +
+            '</div>' +
+        '</div>';
+    el.classList.toggle('visa--open', wasOpen);
+    el.style.display = 'block';
+}
+
+// Expand / collapse the visa guide (event delegation).
+document.addEventListener('click', function (e) {
+    var tog = e.target.closest('.visa__toggle');
+    if (!tog) return;
+    var sec = tog.closest('.visa');
+    if (!sec) return;
+    var open = sec.classList.toggle('visa--open');
+    tog.setAttribute('aria-expanded', open ? 'true' : 'false');
+});
+
 function applyCountryTheme(code) {
     var themes = {
         es:{primary:'#c0392b',accent:'#e67e22'},
@@ -4492,8 +4997,11 @@ function applyCountryTheme(code) {
         var r = parseInt(hex.slice(1,3),16), g = parseInt(hex.slice(3,5),16), b = parseInt(hex.slice(5,7),16);
         return 'rgba('+r+','+g+','+b+','+a+')';
     }
-    var bg = 'linear-gradient(135deg, #ffffff 52%, ' + hexRgba(t.primary, 0.06) + ' 100%)';
-    var glow = 'radial-gradient(ellipse 65% 75% at 100% 0%, ' + hexRgba(t.primary, 0.09) + ' 0%, transparent 65%)';
+    // Base tint must follow the theme — white in light mode, the dark card colour in dark mode.
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+    var base = isDark ? '#262624' : '#ffffff';
+    var bg = 'linear-gradient(135deg, ' + base + ' 52%, ' + hexRgba(t.primary, isDark ? 0.16 : 0.06) + ' 100%)';
+    var glow = 'radial-gradient(ellipse 65% 75% at 100% 0%, ' + hexRgba(t.primary, isDark ? 0.18 : 0.09) + ' 0%, transparent 65%)';
     document.documentElement.style.setProperty('--country-hero-bg',   bg);
     document.documentElement.style.setProperty('--country-hero-glow', glow);
 }
@@ -4573,6 +5081,7 @@ function buildRankCarousel(code) {
                     (fields[0] ? '<div class="rnk__hv__stat"><i class="fa-solid fa-book-open"></i><span>' + fields[0] + '</span></div>' : '') +
                     (fields[1] ? '<div class="rnk__hv__stat"><i class="fa-solid fa-star"></i><span>' + fields[1] + '</span></div>' : '') +
                 '</div>' +
+                (window.UniRating ? '<div class="rnk__hv__rating">' + window.UniRating.compact(u) + '</div>' : '') +
             '</div>' +
         '</div>';
     }
@@ -4667,6 +5176,7 @@ function renderBudgetPage() {
                 (u.founded  ? '<span class="bm__stat"><i class="fa-solid fa-building-columns"></i> Est. ' + u.founded + '</span>' : '') +
                 (u.students ? '<span class="bm__stat"><i class="fa-solid fa-user-group"></i> ' + u.students + '</span>' : '') +
             '</div>' +
+            (window.UniRating ? '<div class="mp__card__rating mp__card__rating--bottom">' + window.UniRating.compact(u) + '</div>' : '') +
         '</div>';
     }).join('');
 
@@ -4814,10 +5324,21 @@ function getDestTime() {
         var dt = getDestTime();
         var h = dt.h % 12, m = dt.m, s = dt.s;
 
+        // Theme-aware palette — dark mode draws in warm cream so the dial reads
+        // clearly against the dark hero container; second hand uses the coral accent.
+        var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+        var col = dark ? {
+            rim: 'rgba(245,244,238,0.22)', tickMaj: 'rgba(245,244,238,0.85)', tickMin: 'rgba(245,244,238,0.32)',
+            hour: 'rgba(245,244,238,0.95)', minute: 'rgba(245,244,238,0.78)', second: '#e89274', hub: 'rgba(245,244,238,0.92)'
+        } : {
+            rim: 'rgba(0,0,0,0.30)', tickMaj: 'rgba(0,0,0,0.65)', tickMin: 'rgba(0,0,0,0.25)',
+            hour: 'rgba(0,0,0,0.90)', minute: 'rgba(0,0,0,0.75)', second: '#e74c3c', hub: 'rgba(0,0,0,0.85)'
+        };
+
         ctx.clearRect(0, 0, W, H);
 
         ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-        ctx.strokeStyle = 'rgba(0,0,0,0.30)'; ctx.lineWidth = 1.5; ctx.stroke();
+        ctx.strokeStyle = col.rim; ctx.lineWidth = 1.5; ctx.stroke();
 
         for (var i = 0; i < 12; i++) {
             var ang = (i / 12) * 2 * Math.PI - Math.PI / 2;
@@ -4827,30 +5348,34 @@ function getDestTime() {
                        cy + Math.sin(ang) * (r - (isMaj ? 8 : 5)));
             ctx.lineTo(cx + Math.cos(ang) * (r - 1),
                        cy + Math.sin(ang) * (r - 1));
-            ctx.strokeStyle = isMaj ? 'rgba(0,0,0,0.65)' : 'rgba(0,0,0,0.25)';
+            ctx.strokeStyle = isMaj ? col.tickMaj : col.tickMin;
             ctx.lineWidth = isMaj ? 2 : 1; ctx.stroke();
         }
+
+        // Subtle glow on the hands in dark mode for a polished look.
+        if (dark) { ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 3; }
 
         var hAng = ((h + m / 60) / 12) * 2 * Math.PI - Math.PI / 2;
         ctx.beginPath(); ctx.moveTo(cx, cy);
         ctx.lineTo(cx + Math.cos(hAng) * r * 0.50, cy + Math.sin(hAng) * r * 0.50);
-        ctx.strokeStyle = 'rgba(0,0,0,0.90)'; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
+        ctx.strokeStyle = col.hour; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
 
         var mAng = ((m + s / 60) / 60) * 2 * Math.PI - Math.PI / 2;
         ctx.beginPath(); ctx.moveTo(cx, cy);
         ctx.lineTo(cx + Math.cos(mAng) * r * 0.74, cy + Math.sin(mAng) * r * 0.74);
-        ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+        ctx.strokeStyle = col.minute; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
 
         var sAng = (s / 60) * 2 * Math.PI - Math.PI / 2;
         ctx.beginPath();
         ctx.moveTo(cx - Math.cos(sAng) * r * 0.20, cy - Math.sin(sAng) * r * 0.20);
         ctx.lineTo(cx + Math.cos(sAng) * r * 0.84, cy + Math.sin(sAng) * r * 0.84);
-        ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.stroke();
+        ctx.strokeStyle = col.second; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.stroke();
+        ctx.shadowBlur = 0;
 
         ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
-        ctx.fillStyle = '#e74c3c'; ctx.fill();
+        ctx.fillStyle = col.second; ctx.fill();
         ctx.beginPath(); ctx.arc(cx, cy, 1.2, 0, 2 * Math.PI);
-        ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fill();
+        ctx.fillStyle = col.hub; ctx.fill();
 
         if (timeEl) timeEl.textContent = String(dt.h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
         if (dateEl) {
@@ -5431,26 +5956,34 @@ function applyLanguage(lang) {
     }
 }());
 
-/* ── Overview scroll: lightweight fade-in + header shadow ── */
+/* ── Overview scroll: staggered reveal + header shadow ── */
 (function() {
     if (typeof IntersectionObserver === 'undefined') return;
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
     var hdr = document.querySelector('.mp__header');
     var io = new IntersectionObserver(function(entries) {
         entries.forEach(function(e) {
             if (e.isIntersecting) {
+                // Stagger siblings that come into view together for a playful cascade.
+                var sibs = e.target.parentNode ? e.target.parentNode.children : [];
+                var idx = Array.prototype.indexOf.call(sibs, e.target);
+                e.target.style.transitionDelay = Math.min((idx % 4) * 70, 210) + 'ms';
                 e.target.classList.remove('ovw__hidden');
                 e.target.classList.add('ovw__reveal');
                 io.unobserve(e.target);
             }
         });
-    }, { threshold: 0.1 });
+    }, { threshold: 0.1, rootMargin: '0px 0px -8% 0px' });
 
-    /* Only hide + watch sections that start below the fold */
+    /* Hide + watch the overview blocks that start below the fold */
     setTimeout(function() {
+        if (reduce) return;   // honour reduced-motion: no hide/reveal dance
         var vh = window.innerHeight;
-        document.querySelectorAll('#tabOverview .mp__section').forEach(function(el) {
-            if (el.getBoundingClientRect().top > vh) {
+        var sel = '#tabOverview .mp__section, #tabOverview .exp__break, ' +
+                  '#tabOverview .rnk__section__wrap, #tabOverview .dshacad';
+        document.querySelectorAll(sel).forEach(function(el) {
+            if (el.getBoundingClientRect().top > vh * 0.92) {
                 el.classList.add('ovw__hidden');
                 io.observe(el);
             }
@@ -5584,8 +6117,24 @@ function applyEliteUI() {
     try { var p = getProfile(); p.elite = elite; setProfile(p); } catch (e) {}
 }
 
+// Admin accounts are always Elite (granted manually, never billed).
+function isAdminAccount() {
+    var admins = ['vanyochek'];
+    var u = (user && user.username || '').toLowerCase();
+    var e = (user && user.email || '').toLowerCase();
+    return admins.indexOf(u) !== -1 || admins.indexOf(e) !== -1;
+}
+
 // Fetch the verified status from the backend and repaint.
 function refreshEliteStatus(cb) {
+    if (isAdminAccount()) {
+        eliteState.elite = true;
+        eliteState.status = 'granted';
+        applyEliteUI();
+        try { syncDigestSubscription(); } catch (e) {}
+        if (cb) cb(eliteState);
+        return;
+    }
     payFetch('/api/subscription/status?userId=' + encodeURIComponent(user.id) +
         '&email=' + encodeURIComponent(user.email || '') +
         '&username=' + encodeURIComponent(user.username || ''))
@@ -6349,6 +6898,13 @@ function showCheckoutBanner(kind) {
         return { pct: pct, reasons: reasons.slice(0, 4), factors: factors, code: code };
     }
 
+    // Expose the full-preferences scorer so the Gradebook can rank realistic
+    // options by ALL the matcher filters (subjects, hobbies, vibe, priorities…).
+    window.fyScoreUni = function (u, prefs) {
+        try { return scoreUni(u, prefs, (typeof currentCountryCode !== 'undefined' ? currentCountryCode : 'es')).pct; }
+        catch (e) { return 0; }
+    };
+
     function ringColor(p) { return p >= 80 ? '#27ae60' : p >= 60 ? 'var(--orange)' : '#8a909c'; }
 
     // little toast
@@ -6678,6 +7234,36 @@ function showCheckoutBanner(kind) {
         if (allOverlay && allOverlay.classList.contains('open')) { closeShowAll(); return; }
         if (overlay.classList.contains('open')) closeFy();
     });
+    /* ── "Use these filters for my Gradebook" ──
+       Saves the matcher's hard filters (budget + language) so the Gradebook's
+       "realistic options" honour them. Persists while the toggle is active. */
+    (function () {
+        var sgBtn = document.getElementById('fySaveGbBtn');
+        if (!sgBtn) return;
+        var ON_KEY = 'us_gb_filters_on_' + user.id;
+        var isOn = function () { return localStorage.getItem(ON_KEY) === '1'; };
+        function capture() {
+            return { kind: 'matcher', prefs: readPrefs() };   // full preferences → scored in the Gradebook
+        }
+        function paint() {
+            var on = isOn();
+            sgBtn.classList.toggle('fy__savegb--on', on);
+            var span = sgBtn.querySelector('span');
+            if (span) span.textContent = on ? 'Saving these filters to Gradebook' : 'Use these filters for my Gradebook';
+        }
+        function recaptureIfOn() { if (isOn()) setGbFilters(capture()); }
+        sgBtn.addEventListener('click', function () {
+            var next = !isOn();
+            localStorage.setItem(ON_KEY, next ? '1' : '0');
+            setGbFilters(next ? capture() : null);
+            paint();
+        });
+        // Keep the saved filters fresh as the user tweaks the matcher.
+        var langEl = document.getElementById('fyLang'); if (langEl) langEl.addEventListener('change', recaptureIfOn);
+        var bs = document.getElementById('fyBudget'); if (bs) bs.addEventListener('input', recaptureIfOn);
+        paint();
+    }());
+
     document.getElementById('fyGo').addEventListener('click', runMatch);
     var thisCountryBtn = document.getElementById('fyThisCountry');
     if (thisCountryBtn) thisCountryBtn.addEventListener('click', runMatchCountry);
@@ -6695,17 +7281,105 @@ function applyExploreMatcherLayout() {
     if (!modal || !mount) return;
 
     var elite = (typeof eliteState !== 'undefined' && eliteState && !!eliteState.elite);
-    var sections = [
-        document.querySelector('#tabExplore .exp__hero'),
-        document.querySelector('#tabExplore .exp__break:not(.exp__break--city)'),
-        document.querySelector('#tabExplore .exp__filter__card')
-    ];
+    var hero       = document.querySelector('#tabExplore .exp__hero');
+    // NB: exclude our own matcher separator, otherwise on repeat calls `brk`
+    // resolves to it and the container gets inserted above the separator.
+    var brk        = document.querySelector('#tabExplore .exp__break:not(.exp__break--city):not(.exp__break--matcher)');
+    var filterCard = document.querySelector('#tabExplore .exp__filter__card');
 
     if (elite) {
-        if (modal.parentNode !== mount) { mount.appendChild(modal); }
+        // Elite keeps the SAME search hero as the common version; only the
+        // filter section below it is replaced by the personal-matcher container.
+        if (hero)       hero.style.display = '';
+        if (brk)        brk.style.display = 'none';
+        if (filterCard) filterCard.style.display = 'none';
+
+        // Matcher container with a button (left) + a branded quote (right).
+        var intro = document.getElementById('fyIntro');
+        if (!intro) {
+            intro = document.createElement('div');
+            intro.className = 'fy__intro';
+            intro.id = 'fyIntro';
+            intro.innerHTML =
+                '<button class="fy__intro__close" id="fyMatchClose" type="button" aria-label="Close matcher"><i class="fa-solid fa-xmark"></i></button>' +
+                '<div class="fy__intro__main">' +
+                    '<span class="fy__intro__badge"><i class="fa-solid fa-wand-magic-sparkles"></i> Elite matcher</span>' +
+                    '<div class="fy__intro__titlerow">' +
+                        '<h2 class="fy__intro__title">Find universities made for you</h2>' +
+                        '<span class="fy__intro__tools" id="fyIntroTools"></span>' +
+                    '</div>' +
+                    '<p class="fy__intro__text">Answer a few quick questions and we’ll rank every university by how well it fits you.</p>' +
+                    '<button class="fy__intro__btn" id="fyToggle" type="button" aria-expanded="false">' +
+                        '<i class="fa-solid fa-sliders"></i> <span class="fy__intro__btn__lbl">Open my matcher</span>' +
+                        '<i class="fa-solid fa-chevron-down fy__intro__btn__chev"></i>' +
+                    '</button>' +
+                '</div>' +
+                '<div class="fy__intro__quote">' +
+                    '<i class="fa-solid fa-quote-left fy__intro__quote__mark"></i>' +
+                    '<p class="fy__intro__quote__text">The best university isn’t the highest ranked — it’s the one that fits <em>you</em>.</p>' +
+                    '<div class="fy__intro__quote__brand"><img src="images/logo2.png" alt="UniVersity"><span>UniVersity</span></div>' +
+                '</div>';
+            mount.appendChild(intro);
+        }
+        var collapse = mount.querySelector('.fy__collapse');
+        if (!collapse) {
+            collapse = document.createElement('div');
+            collapse.className = 'fy__collapse';
+            mount.appendChild(collapse);
+        }
+        if (modal.parentNode !== collapse) { collapse.appendChild(modal); }
         modal.classList.add('fy__modal--inline');
         mount.style.display = 'block';
-        sections.forEach(function (el) { if (el) el.style.display = 'none'; });
+        mount.classList.remove('fy--open');          // start collapsed each visit
+
+        // Move "Show all by fit" up into the intro header, on the title's row.
+        var showAllEl = document.getElementById('fyShowAll');
+        var introTools = document.getElementById('fyIntroTools');
+        if (showAllEl && introTools && showAllEl.parentNode !== introTools) {
+            introTools.appendChild(showAllEl);
+        }
+
+        // Section separator (same style used between sections elsewhere).
+        var sep = document.getElementById('fyMatchSep');
+        if (!sep) {
+            sep = document.createElement('div');
+            sep.className = 'exp__break exp__break--matcher';
+            sep.id = 'fyMatchSep';
+            sep.innerHTML = '<div class="exp__break__line"></div>' +
+                '<div class="exp__break__pill"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Made for you</span></div>' +
+                '<div class="exp__break__line"></div>';
+        }
+        sep.style.display = '';
+
+        // Separator + matcher container sit just below the hero / search results.
+        if (brk && brk.parentNode) {
+            brk.parentNode.insertBefore(sep, brk);
+            brk.parentNode.insertBefore(mount, brk);
+        }
+
+        var toggle = document.getElementById('fyToggle');
+        var closeBtnX = document.getElementById('fyMatchClose');
+        function setMatcherOpen(open) {
+            mount.classList.toggle('fy--open', open);
+            if (toggle) {
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                var lbl = toggle.querySelector('.fy__intro__btn__lbl');
+                if (lbl) lbl.textContent = open ? 'Close matcher' : 'Open my matcher';
+            }
+            if (open) {
+                requestAnimationFrame(function () { intro.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+            }
+        }
+        if (toggle && !toggle.__wired) {
+            toggle.__wired = true;
+            toggle.addEventListener('click', function () { setMatcherOpen(!mount.classList.contains('fy--open')); });
+        }
+        if (closeBtnX && !closeBtnX.__wired) {
+            closeBtnX.__wired = true;
+            closeBtnX.addEventListener('click', function () { setMatcherOpen(false); });
+        }
+        setMatcherOpen(false);   // always start collapsed
+
         // Fresh start every time Explore is opened: reset filters + sync the country label.
         if (typeof window.fyReset === 'function') window.fyReset();
         if (typeof window.fyRefresh === 'function') window.fyRefresh();
@@ -6713,7 +7387,18 @@ function applyExploreMatcherLayout() {
         if (overlay && modal.parentNode !== overlay) { overlay.appendChild(modal); }
         modal.classList.remove('fy__modal--inline');
         mount.style.display = 'none';
-        sections.forEach(function (el) { if (el) el.style.display = ''; });
+        mount.classList.remove('fy--open');
+        // Return "Show all by fit" to the modal header for the pop-up matcher.
+        var showAllBack = document.getElementById('fyShowAll');
+        var headBtns = modal.querySelector('.fy__head__btns');
+        if (showAllBack && headBtns && showAllBack.parentNode !== headBtns) {
+            headBtns.appendChild(showAllBack);
+        }
+        var sepOff = document.getElementById('fyMatchSep');
+        if (sepOff) sepOff.style.display = 'none';
+        if (hero)       hero.style.display = '';
+        if (brk)        brk.style.display = '';
+        if (filterCard) filterCard.style.display = '';
     }
     window.__fyInline = elite;
     if (typeof window.updateFyButtons === 'function') window.updateFyButtons();
@@ -6754,8 +7439,21 @@ function applyExploreMatcherLayout() {
     function gradeColor(g) { return ringColor(toPct(g)); }
 
     /* ── Maths ─────────────────────────────────────────────── */
+    // All numeric exam marks a subject has across both semesters (clamped to scale).
+    function subjMarks(s) {
+        var mx = scaleMax(), out = [];
+        [s && s.sem1, s && s.sem2].forEach(function (arr) {
+            (arr || []).forEach(function (m) {
+                if (m != null && m !== '' && !isNaN(m)) out.push(Math.max(0, Math.min(mx, +m)));
+            });
+        });
+        return out;
+    }
     function subjAvg(s) {
         var mx = scaleMax();
+        // Prefer per-semester exam marks (the detailed table) when present.
+        var marks = subjMarks(s);
+        if (marks.length) return marks.reduce(function (a, b) { return a + b; }, 0) / marks.length;
         // Final grade per subject (what the student/PDF provides). Falls back to the
         // legacy per-assessment average for any older data.
         if (s.grade != null && s.grade !== '') return Math.max(0, Math.min(mx, +s.grade));
@@ -6861,6 +7559,8 @@ function applyExploreMatcherLayout() {
 
     function renderOverall() {
         var o = overallAvg();
+        var hero = document.querySelector('.gb__hero');
+        if (hero) hero.classList.toggle('gb__hero--empty', o == null);
         var ringNum = document.getElementById('gbRingNum');
         if (ringNum) { ringNum.textContent = o == null ? '—' : Math.round(o * 10) / 10; ringNum.style.color = o == null ? '' : gradeColor(o); }
         var scEl = document.getElementById('gbAvgScale'); if (scEl) scEl.textContent = o == null ? '' : scaleDef().hint;
@@ -6872,50 +7572,269 @@ function applyExploreMatcherLayout() {
         var glbl = document.getElementById('gbTrendGraphLbl'), aim = aimUni();
         if (glbl) {
             if (c == null) glbl.textContent = 'Add grades to see your trajectory';
-            else glbl.innerHTML = '<span style="color:' + (up ? '#27ae60' : '#e74c3c') + ';font-weight:800">' + (up ? '▲ On track' : '▼ Off track') + '</span> · ' + c + '% toward ' + (aim ? esc(aim.name) : 'your goal');
+            else glbl.innerHTML = '<span style="color:' + (up ? '#27ae60' : '#e8850a') + ';font-weight:800">' + c + '% ready</span> for ' + (aim ? esc(aim.name) : 'your goal');
         }
+    }
+
+    // Mini bar-chart of a subject's per-exam grades (under the subject name).
+    function subjBarsHTML(s) {
+        var slots = [].concat(s.sem1 || [], s.sem2 || []);
+        if (!slots.length) return '';
+        var mx = scaleMax();
+        var bars = slots.map(function (m, i) {
+            if (m == null || m === '' || isNaN(m)) {
+                return '<span class="gb__bar gb__bar--empty" title="Exam ' + (i + 1) + ' · not taken yet"></span>';
+            }
+            var h = Math.max(16, Math.min(100, (+m) / mx * 100));
+            return '<span class="gb__bar" style="height:' + h + '%;--bc:' + gradeColor(+m) + '" title="Exam ' + (i + 1) + ' · ' + (Math.round(m * 10) / 10) + '"></span>';
+        }).join('');
+        return '<div class="gb__subject__bars" aria-hidden="true">' + bars + '</div>';
     }
 
     function renderSubjects() {
         var box = document.getElementById('gbSubjects');
         if (!box) return;
-        if (!GB.subjects.length) { box.innerHTML = '<div class="gb__empty"><i class="fa-solid fa-book-open"></i><p>No subjects yet. Add your first subject above to start tracking grades.</p></div>'; return; }
+        if (!GB.subjects.length) {
+            box.innerHTML =
+                '<div class="gb__empty gb__empty--start">' +
+                    '<img src="images/logo2.png" alt="UniVersity" class="gb__empty__logo">' +
+                    '<h3>Add your subjects &amp; grades</h3>' +
+                    '<p>Type a subject above to start tracking — or upload the grade report you already have and we\'ll fill it in for you.</p>' +
+                    '<div class="gb__empty__actions">' +
+                        '<button class="gb__btn gb__btn--primary" id="gbEmptyAddBtn"><i class="fa-solid fa-plus"></i> Add a subject</button>' +
+                        '<button class="gb__btn gb__btn--light" id="gbEmptyUploadBtn"><i class="fa-solid fa-file-arrow-up"></i> Upload grade report (PDF)</button>' +
+                    '</div>' +
+                '</div>';
+            var ea = document.getElementById('gbEmptyAddBtn');
+            if (ea) ea.addEventListener('click', function () { var i = document.getElementById('gbNewSubject'); if (i) i.focus(); });
+            var eu = document.getElementById('gbEmptyUploadBtn');
+            if (eu) eu.addEventListener('click', function () { var b = document.getElementById('gbUploadBtn'); if (b) b.click(); });
+            return;
+        }
         var hint = scaleDef().hint, mx = scaleMax();
         box.innerHTML = GB.subjects.map(function (s) {
             var avg = subjAvg(s);
-            // One final grade per subject — editable inline. No per-test inputs.
-            return '<div class="gb__subject gb__subject--final" style="--sc:' + (s.color || '#d97c14') + '" data-sid="' + s.id + '">' +
-                '<div class="gb__subject__name"><span class="gb__subject__dot"></span>' + esc(s.name) + '</div>' +
+            var marks = subjMarks(s);
+            var nExams = (s.sem1 ? s.sem1.length : 0) + (s.sem2 ? s.sem2.length : 0);
+            var locked = marks.length > 0;     // managed via the detailed table
+            var goalChip = (s.goal != null && s.goal !== '')
+                ? '<span class="gb__subject__goal" title="Your goal for this subject"><i class="fa-solid fa-bullseye"></i> ' + (Math.round(s.goal * 10) / 10) + '</span>' : '';
+            var examChip = nExams ? '<span class="gb__subject__exch"><i class="fa-solid fa-table-list"></i> ' + marks.length + '/' + nExams + '</span>' : '';
+            return '<div class="gb__subject gb__subject--final gb__subject--click" style="--sc:' + (s.color || '#d97c14') + '" data-sid="' + s.id + '" title="Open marks table">' +
+                '<div class="gb__subject__lead">' +
+                    '<div class="gb__subject__name"><span class="gb__subject__dot"></span>' + esc(s.name) + goalChip + examChip + '</div>' +
+                    subjBarsHTML(s) +
+                '</div>' +
                 '<div class="gb__subject__final">' +
-                    '<input type="number" class="gb__sgrade" min="0" max="' + mx + '" step="0.1" placeholder="—" value="' + (avg == null ? '' : (Math.round(avg * 10) / 10)) + '"' + (avg == null ? '' : ' style="color:' + gradeColor(avg) + '"') + '>' +
+                    (locked
+                        ? '<span class="gb__sgrade gb__sgrade--ro" style="color:' + gradeColor(avg) + '">' + (avg == null ? '—' : (Math.round(avg * 10) / 10)) + '</span>'
+                        : '<input type="number" class="gb__sgrade" min="0" max="' + mx + '" step="0.1" placeholder="—" value="' + (avg == null ? '' : (Math.round(avg * 10) / 10)) + '"' + (avg == null ? '' : ' style="color:' + gradeColor(avg) + '"') + '>') +
                     '<span class="gb__sgrade__max">' + hint + '</span>' +
                 '</div>' +
+                '<i class="fa-solid fa-chevron-right gb__subject__go" title="Open marks table"></i>' +
                 '<button class="gb__subject__del" title="Remove subject"><i class="fa-solid fa-trash-can"></i></button>' +
             '</div>';
         }).join('');
     }
 
+    /* ════════ Per-subject marks table modal (two semesters + goal) ════════ */
+    var gbsmEl = null, gbsmSid = null;
+    function gbRound(v) { return Math.round(v * 10) / 10; }
+    function gbMean(arr) {
+        var nums = (arr || []).filter(function (m) { return m != null && m !== '' && !isNaN(m); }).map(Number);
+        if (!nums.length) return null;
+        return nums.reduce(function (a, b) { return a + b; }, 0) / nums.length;
+    }
+
+    // Build the recommendation lines: what to score next to hit the goal / pass the uni.
+    function gbSubjectRecHTML(s) {
+        var mx = scaleMax(), hint = scaleDef().hint;
+        var marks = subjMarks(s);
+        var T = (s.sem1 ? s.sem1.length : 0) + (s.sem2 ? s.sem2.length : 0);
+        var taken = marks.length, remaining = T - taken;
+        var sum = marks.reduce(function (a, b) { return a + b; }, 0);
+        var cur = taken ? sum / taken : null;
+        var rows = [];
+        var G = (s.goal != null && s.goal !== '' && !isNaN(s.goal)) ? Math.max(0, Math.min(mx, +s.goal)) : null;
+
+        if (G != null) {
+            if (remaining > 0) {
+                var needed = (G * T - sum) / remaining;
+                var best = (sum + mx * remaining) / T;
+                if (needed > mx + 1e-9) rows.push({ ic: 'fa-circle-exclamation', cls: 'warn', html: 'Your goal of <b>' + gbRound(G) + '</b> isn’t reachable with ' + remaining + ' exam' + (remaining > 1 ? 's' : '') + ' left — even full marks finishes at ~<b>' + gbRound(best) + '</b>. Try aiming a little lower.' });
+                else if (needed <= 0) rows.push({ ic: 'fa-circle-check', cls: 'good', html: 'You’ve already locked in your goal of <b>' + gbRound(G) + '</b> 🎉 — anything on the rest keeps you there.' });
+                else rows.push({ ic: 'fa-wand-magic-sparkles', cls: 'aim', html: 'Score about <b>' + gbRound(needed) + ' ' + hint + '</b> on your remaining <b>' + remaining + '</b> exam' + (remaining > 1 ? 's' : '') + ' to finish this subject at your goal of <b>' + gbRound(G) + '</b>.' });
+            } else if (taken) {
+                var d = G - cur;
+                if (d <= 0.05) rows.push({ ic: 'fa-circle-check', cls: 'good', html: 'You’ve hit your goal — current average <b>' + gbRound(cur) + '</b> ≥ goal <b>' + gbRound(G) + '</b> 🎉' });
+                else rows.push({ ic: 'fa-arrow-trend-up', cls: 'aim', html: 'You’re <b>' + gbRound(d) + '</b> below your goal of <b>' + gbRound(G) + '</b>. Add upcoming exams with “+” to plan how to close it.' });
+            } else {
+                rows.push({ ic: 'fa-table-list', cls: 'aim', html: 'Set how many exams you have and add your marks — then I’ll tell you exactly what you need to hit <b>' + gbRound(G) + '</b>.' });
+            }
+        }
+
+        var aim = aimUni();
+        if (aim && cur != null) {
+            var req = reqMark(aim), gap = gbRound(req - cur);
+            if (gap <= 0) rows.push({ ic: 'fa-graduation-cap', cls: 'good', html: 'This subject already clears <b>' + esc(aim.name) + '</b>’s bar (~<b>' + req + ' ' + hint + '</b>). 🎉' });
+            else if (remaining > 0) {
+                var needU = (req * T - sum) / remaining;
+                rows.push({ ic: 'fa-graduation-cap', cls: 'aim', html: 'To pass <b>' + esc(aim.name) + '</b> (~' + req + ' ' + hint + '), aim for ~<b>' + gbRound(Math.min(mx, needU)) + '</b> on your remaining ' + remaining + ' exam' + (remaining > 1 ? 's' : '') + ' — you’re <b>+' + gap + '</b> short.' });
+            } else rows.push({ ic: 'fa-graduation-cap', cls: 'aim', html: 'You’re <b>+' + gap + ' ' + hint + '</b> short of <b>' + esc(aim.name) + '</b>’s bar (~' + req + '). Add upcoming exams to plan it.' });
+        }
+
+        if (!rows.length) rows.push({ ic: 'fa-lightbulb', cls: 'aim', html: 'Set a goal mark above (and pick your dream university in the Gradebook) and I’ll tell you exactly what to score next.' });
+        return rows.map(function (r) { return '<div class="gbsm__rec gbsm__rec--' + r.cls + '"><span class="gbsm__rec__ic"><i class="fa-solid ' + r.ic + '"></i></span><span class="gbsm__rec__tx">' + r.html + '</span></div>'; }).join('');
+    }
+
+    function gbSemTableHTML(s, semKey, label) {
+        var arr = s[semKey] || [], mx = scaleMax(), hint = scaleDef().hint, avg = gbMean(arr);
+        var inputs = arr.map(function (m, i) {
+            return '<div class="gbsm__cell"><span class="gbsm__cell__n">' + (i + 1) + '</span>' +
+                '<input type="number" class="gbsm__mark" data-sem="' + semKey + '" data-i="' + i + '" min="0" max="' + mx + '" step="0.1" placeholder="—" value="' + (m == null || m === '' ? '' : m) + '"></div>';
+        }).join('');
+        return '<div class="gbsm__sem">' +
+            '<div class="gbsm__sem__hd"><span class="gbsm__sem__title">' + label + '</span>' +
+                '<span class="gbsm__count"><button type="button" class="gbsm__count__btn" data-act="dec" data-sem="' + semKey + '" title="Fewer exams">−</button>' +
+                '<b>' + arr.length + '</b>&nbsp;exam' + (arr.length === 1 ? '' : 's') +
+                '<button type="button" class="gbsm__count__btn" data-act="inc" data-sem="' + semKey + '" title="More exams">+</button></span>' +
+            '</div>' +
+            '<div class="gbsm__grid">' + (inputs || '<div class="gbsm__hint">No exams yet — use “+” to add one.</div>') + '</div>' +
+            '<div class="gbsm__sem__avg">Semester average <b style="color:' + (avg == null ? 'inherit' : gradeColor(avg)) + '">' + (avg == null ? '—' : gbRound(avg)) + '</b> <span>' + hint + '</span></div>' +
+        '</div>';
+    }
+
+    function gbsmRefreshComputed() {
+        if (!gbsmEl || gbsmSid == null) return;
+        var s = GB.subjects.find(function (x) { return x.id === gbsmSid; });
+        if (!s) return;
+        var avg = subjAvg(s);
+        var oEl = gbsmEl.querySelector('.gbsm__overall b');
+        if (oEl) { oEl.textContent = avg == null ? '—' : gbRound(avg); oEl.style.color = avg == null ? '' : gradeColor(avg); }
+        gbsmEl.querySelectorAll('.gbsm__sem').forEach(function (semEl, idx) {
+            var a = gbMean(s[idx === 0 ? 'sem1' : 'sem2']);
+            var b = semEl.querySelector('.gbsm__sem__avg b');
+            if (b) { b.textContent = a == null ? '—' : gbRound(a); b.style.color = a == null ? '' : gradeColor(a); }
+        });
+        var rec = gbsmEl.querySelector('.gbsm__recs');
+        if (rec) rec.innerHTML = gbSubjectRecHTML(s);
+    }
+
+    function gbsmRenderBody() {
+        var s = GB.subjects.find(function (x) { return x.id === gbsmSid; });
+        if (!s || !gbsmEl) return;
+        var mx = scaleMax(), av = subjAvg(s);
+        gbsmEl.querySelector('.gbsm__body').innerHTML =
+            '<div class="gbsm__goal">' +
+                '<label><i class="fa-solid fa-bullseye"></i> Your goal for this subject</label>' +
+                '<div class="gbsm__goal__in"><input type="number" id="gbsmGoal" min="0" max="' + mx + '" step="0.1" placeholder="e.g. ' + Math.round(mx * 0.9) + '" value="' + (s.goal == null ? '' : s.goal) + '"><span>' + scaleDef().hint + '</span></div>' +
+            '</div>' +
+            '<div class="gbsm__sems">' + gbSemTableHTML(s, 'sem1', 'Semester 1') + gbSemTableHTML(s, 'sem2', 'Semester 2') + '</div>' +
+            '<div class="gbsm__overall"><div class="gbsm__overall__lbl">Overall average</div><b style="color:' + (av == null ? '' : gradeColor(av)) + '">' + (av == null ? '—' : gbRound(av)) + '</b><span>' + scaleDef().hint + '</span></div>' +
+            '<div class="gbsm__recs">' + gbSubjectRecHTML(s) + '</div>';
+    }
+
+    function openSubjectModal(sid) {
+        var s = GB.subjects.find(function (x) { return x.id === sid; });
+        if (!s) return;
+        if (!Array.isArray(s.sem1)) s.sem1 = [];
+        if (!Array.isArray(s.sem2)) s.sem2 = [];
+        if (!s.sem1.length && !s.sem2.length && subjMarks(s).length === 0) { s.sem1 = [null, null]; s.sem2 = [null, null]; }
+        gbsmSid = sid;
+
+        var ov = document.createElement('div');
+        ov.className = 'gbsm__overlay';
+        ov.innerHTML =
+            '<div class="gbsm__panel" role="dialog" aria-modal="true" aria-label="Marks for ' + esc(s.name) + '">' +
+                '<button class="gbsm__close" title="Close"><i class="fa-solid fa-xmark"></i></button>' +
+                '<div class="gbsm__hd"><span class="gbsm__dot" style="background:' + (s.color || '#d97c14') + '"></span>' +
+                    '<div><div class="gbsm__title">' + esc(s.name) + '</div><div class="gbsm__sub">Add your exams &amp; marks per semester — we’ll do the maths.</div></div></div>' +
+                '<div class="gbsm__body"></div>' +
+                '<div class="gbsm__foot"><button type="button" class="gbsm__done">Done</button></div>' +
+            '</div>';
+        document.body.appendChild(ov);
+        document.body.style.overflow = 'hidden';
+        gbsmEl = ov;
+        gbsmRenderBody();
+        requestAnimationFrame(function () { ov.classList.add('open'); });
+
+        function close() {
+            ov.classList.remove('open');
+            document.body.style.overflow = '';
+            document.removeEventListener('keydown', onKey);
+            setTimeout(function () { ov.remove(); if (gbsmEl === ov) { gbsmEl = null; gbsmSid = null; } }, 280);
+            commit();
+        }
+        function onKey(e) { if (e.key === 'Escape') close(); }
+
+        ov.addEventListener('mousedown', function (e) { if (e.target === ov) close(); });
+        ov.querySelector('.gbsm__close').addEventListener('click', close);
+        ov.querySelector('.gbsm__done').addEventListener('click', close);
+        document.addEventListener('keydown', onKey);
+
+        ov.addEventListener('input', function (e) {
+            var sCur = GB.subjects.find(function (x) { return x.id === gbsmSid; });
+            if (!sCur) return;
+            var mk = e.target.closest && e.target.closest('.gbsm__mark');
+            if (mk) {
+                var key = mk.dataset.sem, i = parseInt(mk.dataset.i, 10);
+                var v = mk.value === '' ? null : parseFloat(mk.value);
+                if (v != null && !isNaN(v)) v = Math.max(0, Math.min(scaleMax(), v));
+                if (!Array.isArray(sCur[key])) sCur[key] = [];
+                sCur[key][i] = (v == null || isNaN(v)) ? null : v;
+                save(GB); gbsmRefreshComputed(); return;
+            }
+            if (e.target.id === 'gbsmGoal') {
+                var g = e.target.value === '' ? null : parseFloat(e.target.value);
+                sCur.goal = (g == null || isNaN(g)) ? null : Math.max(0, Math.min(scaleMax(), g));
+                save(GB); gbsmRefreshComputed(); return;
+            }
+        });
+        ov.addEventListener('click', function (e) {
+            var btn = e.target.closest && e.target.closest('.gbsm__count__btn');
+            if (!btn) return;
+            var sCur = GB.subjects.find(function (x) { return x.id === gbsmSid; });
+            if (!sCur) return;
+            var key = btn.dataset.sem;
+            if (!Array.isArray(sCur[key])) sCur[key] = [];
+            if (btn.dataset.act === 'inc') { if (sCur[key].length < 16) sCur[key].push(null); }
+            else if (sCur[key].length > 0) sCur[key].pop();
+            save(GB); gbsmRenderBody();
+        });
+    }
+    window.gbOpenSubject = openSubjectModal;
+
     function renderReadiness() {
         var box = document.getElementById('gbReadiness');
         if (!box) return;
         var ids = allTargetIds();
-        if (!ids.length) { box.innerHTML = '<p class="gb__hint">Pick the universities you\'re aiming for below to see how ready you really are.</p>'; return; }
+        if (!ids.length) { box.innerHTML = '<p class="gb__hint">Pick your dream university in the panel on the right to see how ready you really are.</p>'; return; }
         var o = overallAvg();
         if (o == null) { box.innerHTML = '<p class="gb__hint">Add your grades to calculate readiness.</p>'; return; }
         var cur = Math.round(o * 10) / 10, hint = scaleDef().hint;
-        box.innerHTML = ids.map(function (id) {
+        box.innerHTML = ids.map(function (id, idx) {
             var u = findUni(id); if (!u) return '';
-            var p = readinessPct(u), req = reqMark(u);
+            var p = readinessPct(u), req = reqMark(u), col = ringColor(p);
             var lab = p >= 80 ? 'Strong match' : p >= 45 ? 'Within reach' : 'Long shot';
-            return '<div class="gb__read__row">' +
-                '<div class="gb__read__top">' +
-                    '<span class="gb__read__uni"><span class="gb__read__logo" style="background:' + (u.color || '#d97c14') + '">' + esc(u.abbr || u.name.slice(0, 2).toUpperCase()) + '</span>' + esc(u.name) + '</span>' +
-                    '<b style="color:' + ringColor(p) + '">' + p + '%</b>' +
+            var labIcon = p >= 80 ? 'fa-circle-check' : p >= 45 ? 'fa-arrows-up-to-line' : 'fa-mountain-sun';
+            return '<div class="gb__rd" style="--c:' + (u.color || '#d97c14') + ';--rc:' + col + ';animation-delay:' + (idx * 70) + 'ms">' +
+                '<div class="gb__rd__ring" style="--p:' + p + '"><div class="gb__rd__ring__in"><b style="color:' + col + '">' + p + '<i>%</i></b><small>ready</small></div></div>' +
+                '<div class="gb__rd__body">' +
+                    '<div class="gb__rd__uni">' +
+                        '<span class="gb__rd__logo" style="background:' + (u.color || '#d97c14') + '">' + esc(u.abbr || u.name.slice(0, 2).toUpperCase()) + '</span>' +
+                        '<div class="gb__rd__id"><div class="gb__rd__name">' + esc(u.name) + '</div>' +
+                            '<div class="gb__rd__loc"><i class="fa-solid fa-location-dot"></i> ' + esc(u.city || '') + (u.dl ? ' · ' + esc(u.dl) : '') + '</div></div>' +
+                        '<span class="gb__rd__pill" style="color:' + col + ';border-color:' + col + '33;background:' + col + '14"><i class="fa-solid ' + labIcon + '"></i> ' + lab + '</span>' +
+                    '</div>' +
+                    '<div class="gb__rd__bar"><i style="width:' + p + '%;background:linear-gradient(90deg,' + (u.color || '#d97c14') + ',' + col + ')"></i></div>' +
+                    '<div class="gb__rd__cmp">' +
+                        '<span class="gb__rd__cmp__item"><small>You have</small><b>' + cur + ' ' + hint + '</b></span>' +
+                        '<i class="fa-solid fa-arrow-right gb__rd__cmp__arr"></i>' +
+                        '<span class="gb__rd__cmp__item"><small>Needs ~</small><b>' + req + ' ' + hint + '</b></span>' +
+                    '</div>' +
                 '</div>' +
-                '<div class="gb__read__bar"><i style="width:' + p + '%;background:' + ringColor(p) + '"></i></div>' +
-                '<div class="gb__read__meta"><span style="color:' + ringColor(p) + ';font-weight:700">' + lab + '</span><span>needs ~' + req + ' ' + hint + ' · you have ' + cur + '</span></div>' +
             '</div>';
-        }).join('') || '<p class="gb__hint">Pick the universities you\'re aiming for below.</p>';
+        }).join('') || '<p class="gb__hint">Pick your dream university in the panel on the right.</p>';
     }
 
     // Subjects below the mark required by the university the student is aiming for,
@@ -6945,27 +7864,205 @@ function applyExploreMatcherLayout() {
             }).join('');
     }
 
-    function renderTargets() {
-        var box = document.getElementById('gbTargets');
-        if (!box) return;
-        var tiers = [
-            { k: 'dream', label: 'Dream', icon: 'fa-star', hint: 'Reach for the stars' },
-            { k: 'target', label: 'Target', icon: 'fa-bullseye', hint: 'Realistic best-fits' },
-            { k: 'safety', label: 'Safety', icon: 'fa-shield-halved', hint: 'Comfortably within reach' }
-        ];
-        var opts = (typeof UNI !== 'undefined' ? UNI : []).map(function (u) { return '<option value="' + u.id + '">' + esc(u.name) + '</option>'; }).join('');
-        box.innerHTML = tiers.map(function (t) {
-            var chips = (GB.unis[t.k] || []).map(function (id) {
-                var u = findUni(id); if (!u) return '';
-                return '<span class="gb__chip2" style="--cc:' + (u.color || '#d97c14') + '"><b>' + esc(u.abbr || '') + '</b>' + esc(u.name) + '<button class="gb__chip2__del" data-tier="' + t.k + '" data-id="' + id + '"><i class="fa-solid fa-xmark"></i></button></span>';
-            }).join('') || '<span class="gb__hint">None yet</span>';
-            return '<div class="gb__tier gb__tier--' + t.k + '">' +
-                '<div class="gb__tier__hd"><i class="fa-solid ' + t.icon + '"></i> ' + t.label + '<small>' + t.hint + '</small></div>' +
-                '<div class="gb__tier__chips">' + chips + '</div>' +
-                '<div class="gb__tier__add"><select class="gb__input gb__tier__sel" data-tier="' + t.k + '"><option value="">Add a university…</option>' + opts + '</select></div>' +
-            '</div>';
-        }).join('');
+    /* ── Single target university the student is aiming for ── */
+    function getAimId() { return (GB.unis && GB.unis.dream && GB.unis.dream[0]) || null; }
+    function setAimId(id) {
+        GB.unis = GB.unis || { dream: [], target: [], safety: [] };
+        GB.unis.dream = id ? [id] : [];
+        commit();
     }
+    function hasAim() { return !!getAimId(); }
+
+    function renderTargetPanel() {
+        var sel    = document.getElementById('gbAimSelect');
+        var choose = document.getElementById('gbTargetChoose');
+        var chosen = document.getElementById('gbTargetChosen');
+        if (!sel || !choose || !chosen) return;
+        var aimId = getAimId();
+
+        // Populate the picker (current destination's universities).
+        var opts = '<option value="">Select a university…</option>' +
+            (typeof UNI !== 'undefined' ? UNI : []).map(function (u) {
+                return '<option value="' + u.id + '"' + (u.id === aimId ? ' selected' : '') + '>' + esc(u.name) + '</option>';
+            }).join('');
+        sel.innerHTML = opts;
+
+        if (aimId) {
+            var u = findUni(aimId);
+            choose.style.display = 'none';
+            chosen.style.display = 'block';
+            var logo = document.getElementById('gbDreamLogo');
+            var nameEl = document.getElementById('gbAimName');
+            var metaEl = document.getElementById('gbDreamMeta');
+            if (logo) { logo.textContent = u ? (u.abbr || (u.name || '?').slice(0,2).toUpperCase()) : '★'; logo.style.background = u ? (u.color || '#d97c14') : '#d97c14'; }
+            if (nameEl) nameEl.textContent = u ? u.name : 'your university';
+            if (metaEl) metaEl.innerHTML = u
+                ? '<i class="fa-solid fa-location-dot"></i> ' + esc(u.city || '') + (u.dl ? ' · ' + esc(u.dl) : '')
+                : '';
+        } else {
+            choose.style.display = 'block';
+            chosen.style.display = 'none';
+        }
+        updateUploadGate();
+    }
+
+    // Block grade uploads until a target university is chosen.
+    function updateUploadGate() {
+        var locked = !hasAim();
+        var up = document.getElementById('gbUploadBtn');
+        if (up) {
+            up.classList.toggle('gb__btn--locked', locked);
+            up.title = locked ? 'Choose your target university first' : '';
+        }
+    }
+
+    /* ── Post-upload: gap to dream + realistic options within budget ── */
+    var suggestUseExplore = false;
+    var suggestPage = 1;
+    var SG_PER_PAGE = 4;
+    function realisticOptions(useExplore) {
+        var o = overallAvg(); if (o == null) return [];
+        var gPct = toPct(o);
+        var prof = (typeof getProfile === 'function') ? getProfile() : { budget: Infinity };
+        var ef = (typeof getGbFilters === 'function' && getGbFilters()) || {};   // filters saved from Explore
+        var matcher = useExplore && ef.kind === 'matcher' && ef.prefs && typeof window.fyScoreUni === 'function';
+        var aimId = getAimId();
+        var list = (typeof UNI !== 'undefined' ? UNI : []).filter(function (u) {
+            if (u.id === aimId) return false;                       // skip the dream itself
+            if (readinessForPct(gPct, u) < 60) return false;        // realistically reachable
+            if (tuitionMinCost(u) > (prof.budget || Infinity)) return false;   // within budget
+            if (useExplore && ef.kind === 'filters') {
+                // Simple Explore-dropdown filters (free-user path).
+                if (ef.city    && u.city !== ef.city) return false;
+                if (ef.type    && u.type !== ef.type) return false;
+                if (ef.tuition && u.ts   >  parseInt(ef.tuition, 10)) return false;
+                if (ef.budget  && tuitionMinCost(u) > parseInt(ef.budget, 10)) return false;
+                if (ef.field   && (u.fields || []).indexOf(ef.field) === -1) return false;
+                if (ef.lang    && (u.langs  || []).indexOf(ef.lang)  === -1) return false;
+            }
+            return true;
+        });
+        if (matcher) {
+            // Rank by the matcher's full-preference fit (subjects, hobbies, language,
+            // city vibe, priorities, budget, athletics — everything).
+            return list
+                .map(function (u) { return { u: u, s: window.fyScoreUni(u, ef.prefs) }; })
+                .sort(function (a, b) { return b.s - a.s; })
+                .map(function (x) { return x.u; })
+                .slice(0, 16);
+        }
+        return list.sort(function (a, b) { return readinessForPct(gPct, b) - readinessForPct(gPct, a); }).slice(0, 16);
+    }
+
+    // Toggle the "See my realistic options" reopen button (only when there's something to show).
+    function renderSuggest() {
+        var aim = aimUni(), o = overallAvg();
+        var btn = document.getElementById('gbOpenSuggest');
+        if (btn) btn.style.display = (aim && o != null) ? 'inline-flex' : 'none';
+        // If the modal is open, keep its contents fresh.
+        var ov = document.getElementById('gbSuggestOverlay');
+        if (ov && ov.classList.contains('gbsg--open')) renderSuggestModal();
+    }
+
+    function renderSuggestModal() {
+        var modal = document.getElementById('gbSuggestModal');
+        if (!modal) return;
+        var aim = aimUni(), o = overallAvg();
+        if (!aim || o == null) return;
+
+        var ready = readinessPct(aim);
+        var gap = Math.max(0, 100 - (ready == null ? 0 : ready));
+        var gapColor = gap <= 15 ? '#27ae60' : gap <= 40 ? '#e8850a' : '#e74c3c';
+
+        var opts = realisticOptions(suggestUseExplore);
+        var totalPages = Math.max(1, Math.ceil(opts.length / SG_PER_PAGE));
+        if (suggestPage > totalPages) suggestPage = totalPages;
+        if (suggestPage < 1) suggestPage = 1;
+        var pageOpts = opts.slice((suggestPage - 1) * SG_PER_PAGE, suggestPage * SG_PER_PAGE);
+
+        var cards = pageOpts.length ? pageOpts.map(function (u, i) {
+            var rank = (typeof UNI !== 'undefined') ? UNI.indexOf(u) + 1 : 0;
+            return '<button class="gbsg__card" data-id="' + u.id + '" style="--c:' + (u.color || '#d97c14') + ';animation-delay:' + (i * 55) + 'ms">' +
+                '<span class="gbsg__card__logo" style="background:' + (u.color || '#d97c14') + '">' + esc(u.abbr || (u.name || '?').slice(0,2).toUpperCase()) + '</span>' +
+                '<div class="gbsg__card__info">' +
+                    '<div class="gbsg__card__name">' + esc(u.name) + '</div>' +
+                    '<div class="gbsg__card__meta"><i class="fa-solid fa-location-dot"></i> ' + esc(u.city || '') + '</div>' +
+                '</div>' +
+                (rank > 0 ? '<span class="gbsg__card__rank"><small>#</small>' + rank + '</span>' : '') +
+            '</button>';
+        }).join('') : '<p class="gbsg__none"><i class="fa-solid fa-circle-info"></i> No options match these filters — try widening them on Explore.</p>';
+
+        // Compact keyword chips of the filters the user saved from Explore.
+        var ef = (typeof getGbFilters === 'function' && getGbFilters()) || {};
+        var fk = [];
+        if (ef.kind === 'matcher' && ef.prefs) {
+            var p = ef.prefs;
+            (p.subjects || []).forEach(function (s) { fk.push(s); });
+            (p.hobbies || []).forEach(function (h) { fk.push(h); });
+            if (p.lang) fk.push(p.lang);
+            if (p.sport && p.athlete) fk.push(p.sport);
+            if (p.vibe === 'big') fk.push('big city'); else if (p.vibe === 'small') fk.push('smaller town');
+            (p.priorities || []).forEach(function (pr) { fk.push(pr); });
+            if (p.budget) fk.push('≤ €' + Number(p.budget).toLocaleString() + '/yr');
+        } else {
+            if (ef.field)   fk.push(ef.field);
+            if (ef.lang)    fk.push(ef.lang);
+            if (ef.type)    fk.push(ef.type);
+            if (ef.city)    fk.push(ef.city);
+            if (ef.budget)  fk.push('≤ €' + Number(ef.budget).toLocaleString() + '/yr');
+        }
+        var chips = fk.length
+            ? fk.map(function (c) { return '<span class="gbsg__fchip">' + esc(c) + '</span>'; }).join('')
+            : '<span class="gbsg__fchip gbsg__fchip--none">no saved Explore filters — set them on Explore</span>';
+
+        var pager = totalPages > 1
+            ? '<div class="gbsg__pager">' +
+                '<button class="gbsg__pg" id="gbSgPrev"' + (suggestPage <= 1 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-left"></i></button>' +
+                '<span class="gbsg__pg__lbl">' + suggestPage + ' / ' + totalPages + '</span>' +
+                '<button class="gbsg__pg" id="gbSgNext"' + (suggestPage >= totalPages ? ' disabled' : '') + '><i class="fa-solid fa-chevron-right"></i></button>' +
+              '</div>'
+            : '';
+
+        modal.innerHTML =
+            '<button class="gbsg__close" id="gbSuggestClose" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>' +
+            '<div class="gbsg__hero">' +
+                '<div class="gbsg__ring" style="--p:' + gap + ';--rc:' + gapColor + '"><div class="gbsg__ring__in"><b>' + gap + '%</b><small>away</small></div></div>' +
+                '<div class="gbsg__hero__txt">' +
+                    '<div class="gbsg__hero__eyebrow"><i class="fa-solid fa-star"></i> Your dream</div>' +
+                    '<h3 class="gbsg__hero__title">' + esc(aim.name) + '</h3>' +
+                    '<p class="gbsg__hero__sub">You\'re <b style="color:' + gapColor + '">' + gap + '% away</b> — here are realistic options that fit you.</p>' +
+                '</div>' +
+            '</div>' +
+            '<div class="gbsg__body">' +
+                '<div class="gbsg__bar">' +
+                    '<span class="gbsg__bar__lbl"><i class="fa-solid fa-wand-magic-sparkles"></i> Realistic options</span>' +
+                    '<button class="gbsg__filter' + (suggestUseExplore ? ' gbsg__filter--on' : '') + '" id="gbSuggestExplore">' +
+                        '<i class="fa-solid fa-sliders"></i> ' + (suggestUseExplore ? 'Matched to filters' : 'Match my filters') +
+                    '</button>' +
+                '</div>' +
+                '<div class="gbsg__chips" title="Filters you picked on the Explore page">' + chips + '</div>' +
+                (suggestUseExplore
+                    ? '<p class="gbsg__hint gbsg__hint--on"><i class="fa-solid fa-circle-check"></i> Matched to your Explore filters.</p>'
+                    : '<p class="gbsg__hint"><i class="fa-solid fa-wand-magic-sparkles"></i> Set filters on <b>Explore</b>, then tap to tailor these to you.</p>'
+                ) +
+                '<div class="gbsg__grid">' + cards + '</div>' +
+                pager +
+            '</div>';
+    }
+
+    function openSuggestModal() {
+        var ov = document.getElementById('gbSuggestOverlay');
+        var aim = aimUni(), o = overallAvg();
+        if (!ov || !aim || o == null) return;
+        suggestPage = 1;
+        renderSuggestModal();
+        ov.classList.add('gbsg--open');
+    }
+    function closeSuggestModal() {
+        var ov = document.getElementById('gbSuggestOverlay');
+        if (ov) ov.classList.remove('gbsg--open');
+    }
+    window.gbOpenSuggest = openSuggestModal;
 
     function renderGaps() {
         var box = document.getElementById('gbGaps');
@@ -7044,8 +8141,16 @@ function applyExploreMatcherLayout() {
         var w = document.getElementById('dshAcademic');
         if (!w) return;
         var brk = document.getElementById('acadBreak');
-        if (!GB.subjects.length) { w.style.display = 'none'; if (brk) brk.style.display = 'none'; return; }
+        var empty = document.getElementById('dshAcadEmpty');
+        if (!GB.subjects.length) {
+            // No grades yet: keep the section visible with a get-started guide.
+            w.style.display = 'none';
+            if (empty) empty.style.display = '';
+            if (brk) brk.style.display = '';
+            return;
+        }
         w.style.display = ''; if (brk) brk.style.display = '';
+        if (empty) empty.style.display = 'none';
         var o = overallAvg();
         document.getElementById('dshAcadAvg').textContent = o == null ? '—' : Math.round(toPct(o));   // always out of 100
         // Animated up/down trajectory graphic (up & green if ≥70% close, else down & red)
@@ -7085,9 +8190,9 @@ function applyExploreMatcherLayout() {
     /* ── Master render + persistence ───────────────────────── */
     function renderAll() {
         renderOverall(); renderSubjects(); renderReadiness(); renderAttention();
-        renderTargets(); renderGaps(); renderPlan(); renderGoals(); renderRecs(); renderWidget();
+        renderTargetPanel(); renderGaps(); renderPlan(); renderSuggest(); renderRecs(); renderWidget();
     }
-    function commit(msg) { save(GB); renderAll(); if (msg) toast(msg); }
+    function commit(msg) { save(GB); renderAll(); if (window.refreshChanceBadges) window.refreshChanceBadges(); if (msg) toast(msg); }
     window.renderGradebook = renderAll;
     window.renderAcademicWidget = renderWidget;
 
@@ -7124,29 +8229,36 @@ function applyExploreMatcherLayout() {
     var recReset = document.getElementById('gbRecReset');
     if (recReset) recReset.addEventListener('click', function () { recOverride = null; renderRecs(); });
 
-    document.getElementById('gbAddGoalBtn').addEventListener('click', function () {
-        var sid = document.getElementById('gbGoalSubject').value;
-        var to = parseInt(document.getElementById('gbGoalTarget').value, 10);
-        var m = document.getElementById('gbGoalDate').value;
-        var s = GB.subjects.find(function (x) { return x.id === sid; });
-        if (!s || !to || !m) { toast('Pick a subject, target and date'); return; }
-        var cur = subjAvg(s); var from = cur == null ? 0 : Math.round(cur);
-        var date = m + '-15';
-        var g = { id: uid(), subjectId: sid, subjectName: s.name, from: from, to: to, date: date, dlId: 'gbgoal_' + uid() };
-        GB.goals.push(g);
-        // Mirror into the existing deadline system so it shows on the Deadlines page.
-        try {
-            var cust = getDlCustom();
-            cust.push({ id: g.dlId, uniName: null, type: 'other', title: s.name + ' target: reach ' + to + '% average', date: date, notes: 'Academic goal — from ' + from + '% to ' + to + '%' });
-            setDlCustom(cust);
-            if (typeof renderDeadlines === 'function') renderDeadlines();
-        } catch (e) {}
-        document.getElementById('gbGoalTarget').value = ''; document.getElementById('gbGoalDate').value = '';
-        commit('Goal added to your Deadlines');
+    // Target university: pick one, or change it.
+    var aimSel = document.getElementById('gbAimSelect');
+    if (aimSel) aimSel.addEventListener('change', function () { if (this.value) setAimId(this.value); });
+    var aimChange = document.getElementById('gbTargetChange');
+    if (aimChange) aimChange.addEventListener('click', function () { setAimId(null); });
+
+    // Realistic-options modal: open / close / toggle Explore filters.
+    var openSgBtn = document.getElementById('gbOpenSuggest');
+    if (openSgBtn) openSgBtn.addEventListener('click', openSuggestModal);
+    var sgOv = document.getElementById('gbSuggestOverlay');
+    if (sgOv) sgOv.addEventListener('click', function (e) {
+        if (e.target === sgOv || e.target.closest('#gbSuggestClose')) { closeSuggestModal(); return; }
+        if (e.target.closest('#gbSuggestExplore')) { suggestUseExplore = !suggestUseExplore; suggestPage = 1; renderSuggestModal(); return; }
+        if (e.target.closest('#gbSgPrev')) { suggestPage--; renderSuggestModal(); return; }
+        if (e.target.closest('#gbSgNext')) { suggestPage++; renderSuggestModal(); return; }
+        var card = e.target.closest('.gbsg__card');
+        if (card && card.dataset.id) {
+            var u = (typeof UNI !== 'undefined') ? UNI.find(function (x) { return x.id === card.dataset.id; }) : null;
+            if (u && typeof showUniDetail === 'function') { closeSuggestModal(); showUniDetail(u); }
+        }
     });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSuggestModal(); });
 
     if (root) root.addEventListener('click', function (e) {
         var t = e.target;
+        // Open the per-subject marks table (ignore the inline grade input + delete).
+        var subjRow = t.closest('.gb__subject--click');
+        if (subjRow && !t.closest('.gb__subject__del') && t.tagName !== 'INPUT') {
+            openSubjectModal(subjRow.dataset.sid); return;
+        }
         // create deadline from the AI improvement plan
         if (t.closest('#gbPlanDeadline')) {
             var plan = improvementPlan(); if (!plan) return;
@@ -7398,11 +8510,21 @@ function applyExploreMatcherLayout() {
                 });
                 close();
                 commit(added ? (added + ' grades imported — your matches updated') : 'Nothing imported');
+                // Auto-open the realistic-options window once a report is in.
+                if (added && hasAim() && overallAvg() != null) setTimeout(openSuggestModal, 360);
             }
         });
     }
 
-    document.getElementById('gbUploadBtn').addEventListener('click', function () { document.getElementById('gbPdfInput').click(); });
+    document.getElementById('gbUploadBtn').addEventListener('click', function () {
+        if (!hasAim()) {
+            toast('Choose the university you\'re aiming for first');
+            var ch = document.getElementById('gbTargetChoose');
+            if (ch) { ch.scrollIntoView({ behavior: 'smooth', block: 'center' }); ch.classList.remove('gb__pulse'); void ch.offsetWidth; ch.classList.add('gb__pulse'); }
+            return;
+        }
+        document.getElementById('gbPdfInput').click();
+    });
     document.getElementById('gbPdfInput').addEventListener('change', function () { if (this.files && this.files[0]) importPdf(this.files[0]); this.value = ''; });
     var scaleSel = document.getElementById('gbScaleSel');
     if (scaleSel) {

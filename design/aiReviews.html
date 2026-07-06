@@ -23,13 +23,15 @@
         --num:"Space Grotesk", ui-monospace, monospace;
         --sb-w:280px;
     }
+    /* Claude-style warm dark palette */
     [data-theme="dark"] {
-        --bg:#141319; --bg2:#100f15; --sidebar:#100f15; --surface:#1c1b24; --surface-2:#191820;
-        --border:rgba(255,255,255,.09); --border-strong:rgba(255,255,255,.16);
-        --text:#f4f2ee; --text-2:#c3c1cb; --text-3:#8b8a96;
-        --accent:#f59220; --accent2:#f5a93f; --accent-deep:#d97c14; --accent-hover:#f5a93f;
-        --accent-soft:rgba(245,146,32,.14); --peach:rgba(245,146,32,.14); --peach2:rgba(245,146,32,.2);
-        --user-bubble:#262430;
+        --bg:#262624; --bg2:#1f1e1d; --sidebar:#1f1e1d; --surface:#30302e; --surface-2:#2a2a28;
+        --border:rgba(255,255,255,.08); --border-strong:rgba(255,255,255,.14);
+        --text:#f5f4ee; --text-2:#c2c0b6; --text-3:#8a887f;
+        --accent:#d97757; --accent2:#e08a6e; --accent-deep:#c45c3d; --accent-hover:#e08a6e;
+        --accent-soft:rgba(217,119,87,.14); --peach:rgba(217,119,87,.14); --peach2:rgba(217,119,87,.22);
+        --user-bubble:#30302e;
+        --grad:linear-gradient(100deg,#e08a6e 0%,#d97757 50%,#c45c3d 100%);
     }
     .grad-text { background:var(--grad); -webkit-background-clip:text; background-clip:text; color:transparent; }
     .accent-serif { font-family:var(--serif); font-style:italic; font-weight:400; }
@@ -110,8 +112,8 @@
     }
     [data-theme="dark"] .chat--welcome {
         background:
-            radial-gradient(120% 80% at 82% -10%, rgba(245,146,32,.12) 0%, transparent 55%),
-            radial-gradient(80% 60% at -8% 8%, rgba(245,146,32,.08) 0%, transparent 52%), var(--bg);
+            radial-gradient(120% 80% at 82% -10%, rgba(217,119,87,.12) 0%, transparent 55%),
+            radial-gradient(80% 60% at -8% 8%, rgba(217,119,87,.08) 0%, transparent 52%), var(--bg);
     }
     .welcome { position:relative; text-align:center; padding:11vh 0 10px; overflow:hidden; }
     .welcome__orb { position:absolute; border-radius:50%; filter:blur(52px); opacity:.5; pointer-events:none; z-index:0; }
@@ -199,7 +201,7 @@
     @keyframes blink { 0%,60%,100%{ opacity:.3; transform:translateY(0);} 30%{ opacity:1; transform:translateY(-3px);} }
 
     .warn { font-family:var(--sans); font-size:13.5px; color:var(--accent-deep); background:var(--peach); border:1px solid rgba(245,146,32,.28); padding:11px 14px; border-radius:12px; line-height:1.6; }
-    [data-theme="dark"] .warn { color:#f5b878; }
+    [data-theme="dark"] .warn { color:#eaa888; }
 
     /* Composer */
     .composer { padding:10px 24px 18px; background:linear-gradient(to top, var(--bg) 70%, transparent); }
@@ -239,6 +241,80 @@
         .thread { padding:20px 16px 36px; }
         .composer { padding:8px 14px 14px; }
     }
+
+    /* ── Application Assistant ── */
+    .sidebar__new--assist { margin-top:8px; }
+    .sidebar__new--assist i { color:var(--accent); }
+
+    .ea__overlay {
+        position:fixed; inset:0; z-index:3000;
+        background:rgba(0,0,0,.5); backdrop-filter:blur(3px);
+        display:none; align-items:flex-start; justify-content:center;
+        padding:40px 16px; overflow-y:auto;
+    }
+    .ea__overlay.ea--open { display:flex; }
+    .ea {
+        width:100%; max-width:680px;
+        background:var(--bg); border:1px solid var(--border); border-radius:18px;
+        box-shadow:0 30px 80px -20px rgba(0,0,0,.5);
+        overflow:hidden; animation:eaIn .25s cubic-bezier(.21,1.11,.4,1);
+    }
+    @keyframes eaIn { from { opacity:0; transform:translateY(20px) scale(.98); } to { opacity:1; transform:none; } }
+    .ea__head { display:flex; align-items:center; gap:13px; padding:18px 20px; border-bottom:1px solid var(--border); background:var(--surface); }
+    .ea__head__icon {
+        width:40px; height:40px; flex-shrink:0; border-radius:11px;
+        display:grid; place-items:center; color:#fff; font-size:16px;
+        background:var(--grad); box-shadow:0 6px 16px -4px rgba(217,119,87,.5);
+    }
+    .ea__title { font-family:var(--display); font-weight:800; font-size:17px; color:var(--text); }
+    .ea__sub { font-size:12px; color:var(--text-3); margin-top:2px; }
+    .ea__close { margin-left:auto; background:transparent; border:none; color:var(--text-3); font-size:18px; cursor:pointer; padding:6px; border-radius:8px; }
+    .ea__close:hover { color:var(--text); background:var(--surface-2); }
+    .ea__body { padding:20px; }
+    .ea__tabs { display:flex; gap:8px; margin-bottom:16px; }
+    .ea__tab {
+        flex:1; display:inline-flex; align-items:center; justify-content:center; gap:7px;
+        font-family:var(--sans); font-size:13px; font-weight:600; cursor:pointer;
+        padding:10px; border-radius:11px; border:1px solid var(--border); background:var(--surface); color:var(--text-2);
+        transition:.15s;
+    }
+    .ea__tab--on { border-color:var(--accent); background:var(--accent-soft); color:var(--accent); }
+    .ea__row { display:flex; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
+    .ea__field { flex:1; min-width:160px; display:flex; flex-direction:column; gap:6px; margin-bottom:14px; }
+    .ea__field--sm { flex:0 0 130px; }
+    .ea__row .ea__field { margin-bottom:0; }
+    .ea__field label { font-size:12px; font-weight:700; color:var(--text-2); font-family:var(--sans); }
+    .ea__field input, .ea__field select, #eaText {
+        font-family:var(--sans); font-size:14px; color:var(--text);
+        background:var(--surface); border:1px solid var(--border-strong); border-radius:11px;
+        padding:11px 13px; width:100%; resize:vertical;
+    }
+    .ea__field input:focus, .ea__field select:focus, #eaText:focus { outline:none; border-color:var(--accent); box-shadow:0 0 0 3px var(--accent-soft); }
+    .ea__actions { margin:4px 0 0; }
+    .ea__go {
+        width:100%; display:inline-flex; align-items:center; justify-content:center; gap:8px;
+        font-family:var(--sans); font-size:14px; font-weight:700; cursor:pointer;
+        padding:13px; border-radius:12px; border:none; color:#fff; background:var(--grad);
+        box-shadow:0 10px 24px -10px rgba(217,119,87,.7); transition:transform .18s, box-shadow .18s;
+    }
+    .ea__go:hover:not(:disabled) { transform:translateY(-2px); }
+    .ea__go:disabled { opacity:.65; cursor:default; }
+    .ea__result { margin-top:18px; border-top:1px solid var(--border); padding-top:16px; }
+    .ea__result__bar { display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+    .ea__result__lbl { font-size:13px; font-weight:700; color:var(--text); display:inline-flex; align-items:center; gap:7px; }
+    .ea__result__lbl i { color:var(--accent); }
+    .ea__copy { font-family:var(--sans); font-size:12px; font-weight:600; cursor:pointer; color:var(--text-2); background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:6px 11px; transition:.15s; }
+    .ea__copy:hover { color:var(--accent); border-color:var(--accent); }
+    .ea__output {
+        font-family:var(--sans); font-size:14px; line-height:1.7; color:var(--text-2);
+        background:var(--surface); border:1px solid var(--border); border-radius:12px;
+        padding:16px 18px; white-space:pre-wrap; max-height:420px; overflow-y:auto;
+    }
+    .ea__output h2, .ea__output h3 { font-family:var(--display); color:var(--text); font-size:15px; margin:14px 0 6px; }
+    .ea__disc { display:flex; gap:8px; font-size:11.5px; color:var(--text-3); line-height:1.55; margin-top:12px; }
+    .ea__disc i { color:var(--accent); margin-top:2px; }
+    .ea__upsell { text-align:center; padding:18px; background:var(--accent-soft); border:1px solid var(--border); border-radius:12px; font-size:13.5px; color:var(--text-2); line-height:1.6; }
+    .ea__upsell a { color:var(--accent); font-weight:700; }
 </style>
 </head>
 <body>
@@ -253,6 +329,7 @@
                 <span class="ar__pill">AI</span>
             </a>
             <button class="sidebar__new" id="newChatBtn"><i class="fa-solid fa-plus"></i> New chat</button>
+            <button class="sidebar__new sidebar__new--assist" id="essayBtn"><i class="fa-solid fa-pen-fancy"></i> Application Assistant</button>
         </div>
         <div class="sidebar__lbl">Conversations</div>
         <div class="sidebar__list" id="convoList"></div>
@@ -287,6 +364,57 @@
     </main>
 </div>
 
+<!-- Application Assistant modal -->
+<div class="ea__overlay" id="essayOverlay">
+    <div class="ea" id="essayModal" role="dialog" aria-modal="true">
+        <div class="ea__head">
+            <div class="ea__head__icon"><i class="fa-solid fa-pen-fancy"></i></div>
+            <div>
+                <div class="ea__title">Application Assistant</div>
+                <div class="ea__sub">Draft or improve your personal statement with AI</div>
+            </div>
+            <button class="ea__close" id="essayClose"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="ea__body" id="essayBody">
+            <div class="ea__tabs">
+                <button class="ea__tab ea__tab--on" data-mode="draft"><i class="fa-solid fa-wand-magic-sparkles"></i> Draft from notes</button>
+                <button class="ea__tab" data-mode="critique"><i class="fa-solid fa-magnifying-glass-chart"></i> Critique my draft</button>
+            </div>
+
+            <div class="ea__row">
+                <div class="ea__field"><label>University</label><input type="text" id="eaUni" placeholder="e.g. University of Amsterdam"></div>
+                <div class="ea__field"><label>Programme</label><input type="text" id="eaProg" placeholder="e.g. MSc Data Science"></div>
+                <div class="ea__field ea__field--sm"><label>Degree</label>
+                    <select id="eaDeg">
+                        <option value="Bachelor's">Bachelor's</option>
+                        <option value="Master's">Master's</option>
+                        <option value="PhD">PhD</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="ea__field">
+                <label id="eaTextLabel">Tell us about yourself — background, motivation, achievements, goals</label>
+                <textarea id="eaText" rows="7" placeholder="A few bullet points are enough — e.g. won a regional maths olympiad; built a weather app; volunteered teaching coding; want to work in climate tech…"></textarea>
+            </div>
+
+            <div class="ea__actions">
+                <button class="ea__go" id="eaGo"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate draft</button>
+            </div>
+
+            <div class="ea__result" id="eaResult" style="display:none">
+                <div class="ea__result__bar">
+                    <span class="ea__result__lbl"><i class="fa-solid fa-file-lines"></i> <span id="eaResultTitle">Your draft</span></span>
+                    <button class="ea__copy" id="eaCopy"><i class="fa-solid fa-copy"></i> Copy</button>
+                </div>
+                <div class="ea__output" id="eaOutput"></div>
+                <div class="ea__disc"><i class="fa-solid fa-circle-info"></i> AI-generated guidance — review, personalise and verify before submitting. Never submit fabricated information.</div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function () {
     var THEME_LS = 'us_theme';
@@ -307,6 +435,15 @@
     var PROMPTS_LS = 'us_ai_prompts_' + USER_ID;
     var CONVOS_LS  = 'us_ai_convos_' + USER_ID;
     var isElite = false;
+
+    // Admin accounts are always Elite (granted manually, never billed).
+    var ADMIN_ACCOUNTS = ['vanyochek'];
+    function isAdminAccount() {
+        var u = (session && session.username || '').toLowerCase();
+        var e = (session && session.email || '').toLowerCase();
+        return ADMIN_ACCOUNTS.indexOf(u) !== -1 || ADMIN_ACCOUNTS.indexOf(e) !== -1;
+    }
+    if (isAdminAccount()) isElite = true;
 
     var PAY_API_BASE = (function () {
         if (location.protocol === 'file:') return 'http://localhost:4242';
@@ -342,12 +479,13 @@
         }
     }
     function refreshElite() {
+        if (isAdminAccount()) { isElite = true; updateQuotaUI(); return; }
         if (USER_ID === 'guest') { updateQuotaUI(); return; }
         fetch(PAY_API_BASE + '/api/subscription/status?userId=' + encodeURIComponent(USER_ID) +
             '&email=' + encodeURIComponent((session && session.email) || '') +
             '&username=' + encodeURIComponent((session && session.username) || ''))
             .then(function (r) { return r.text(); })
-            .then(function (t) { try { var d = JSON.parse(t); isElite = !!d.elite; } catch (e) {} updateQuotaUI(); })
+            .then(function (t) { try { var d = JSON.parse(t); isElite = !!d.elite || isAdminAccount(); } catch (e) {} updateQuotaUI(); })
             .catch(function () { updateQuotaUI(); });
     }
 
@@ -432,6 +570,107 @@
         closeList();
         return html;
     }
+
+    /* ── Application Assistant (personal-statement draft / critique) ── */
+    (function () {
+        var overlay = document.getElementById('essayOverlay');
+        var openBtn = document.getElementById('essayBtn');
+        if (!overlay || !openBtn) return;
+        var body    = document.getElementById('essayBody');
+        var mode    = 'draft';
+        var busy    = false;
+
+        function open() {
+            // Premium perk — Elite (and admin) only.
+            if (!isElite) {
+                body.innerHTML = '<div class="ea__upsell"><i class="fa-solid fa-crown" style="color:var(--accent);font-size:24px;display:block;margin-bottom:10px"></i>' +
+                    'The AI Application Assistant is an <b>Elite</b> feature.<br>Upgrade to draft and refine your personal statements with AI.<br><br>' +
+                    '<a href="mainPage.html">Unlock Elite →</a></div>';
+            }
+            overlay.classList.add('ea--open');
+        }
+        function close() { overlay.classList.remove('ea--open'); }
+
+        openBtn.addEventListener('click', open);
+        document.getElementById('essayClose').addEventListener('click', close);
+        overlay.addEventListener('click', function (e) { if (e.target === overlay) close(); });
+        document.addEventListener('keydown', function (e) { if (e.key === 'Escape') close(); });
+
+        // Tab switch (draft / critique) — only wire when the real form is present.
+        overlay.addEventListener('click', function (e) {
+            var tab = e.target.closest('.ea__tab');
+            if (!tab) return;
+            mode = tab.dataset.mode;
+            overlay.querySelectorAll('.ea__tab').forEach(function (t) { t.classList.toggle('ea__tab--on', t === tab); });
+            var label = document.getElementById('eaTextLabel');
+            var txt   = document.getElementById('eaText');
+            var go    = document.getElementById('eaGo');
+            if (mode === 'critique') {
+                label.textContent = 'Paste your current draft to get detailed feedback';
+                txt.placeholder = 'Paste your personal statement here…';
+                go.innerHTML = '<i class="fa-solid fa-magnifying-glass-chart"></i> Critique my draft';
+            } else {
+                label.textContent = 'Tell us about yourself — background, motivation, achievements, goals';
+                txt.placeholder = 'A few bullet points are enough — e.g. won a regional maths olympiad; built a weather app; want to work in climate tech…';
+                go.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Generate draft';
+            }
+        });
+
+        // Generate / critique
+        overlay.addEventListener('click', function (e) {
+            if (!e.target.closest('#eaGo') || busy) return;
+            var txt = document.getElementById('eaText').value.trim();
+            var go  = document.getElementById('eaGo');
+            var resBox = document.getElementById('eaResult');
+            var out = document.getElementById('eaOutput');
+            if (!txt) { document.getElementById('eaText').focus(); return; }
+
+            busy = true;
+            var orig = go.innerHTML;
+            go.disabled = true;
+            go.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> ' + (mode === 'critique' ? 'Analysing…' : 'Writing…');
+
+            fetch(PAY_API_BASE + '/api/ai/essay', {
+                method: 'POST', headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({
+                    mode: mode,
+                    university: document.getElementById('eaUni').value.trim(),
+                    program: document.getElementById('eaProg').value.trim(),
+                    degree: document.getElementById('eaDeg').value,
+                    notes: mode === 'draft' ? txt : '',
+                    draft: mode === 'critique' ? txt : ''
+                })
+            })
+            .then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); })
+            .then(function (res) {
+                var d = res.body || {};
+                document.getElementById('eaResultTitle').textContent = (d.mode === 'critique') ? 'Feedback on your draft' : 'Your draft';
+                if (res.status !== 200 || d.error) {
+                    out.innerHTML = '<p style="color:#c0392b">' + esc(d.message || 'Something went wrong. Please try again.') + '</p>';
+                } else {
+                    out.innerHTML = mdToHtml(d.text || '');
+                }
+                resBox.style.display = 'block';
+                resBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            })
+            .catch(function (err) {
+                out.innerHTML = '<p style="color:#c0392b">Could not reach the assistant. Make sure the server is running. (' + esc(String(err)) + ')</p>';
+                resBox.style.display = 'block';
+            })
+            .finally(function () { busy = false; go.disabled = false; go.innerHTML = orig; });
+        });
+
+        // Copy result
+        overlay.addEventListener('click', function (e) {
+            if (!e.target.closest('#eaCopy')) return;
+            var text = document.getElementById('eaOutput').innerText;
+            navigator.clipboard.writeText(text).then(function () {
+                var b = document.getElementById('eaCopy');
+                var o = b.innerHTML; b.innerHTML = '<i class="fa-solid fa-check"></i> Copied';
+                setTimeout(function () { b.innerHTML = o; }, 1600);
+            });
+        });
+    }());
 
     /* ── Render the active conversation ── */
     function renderThread() {

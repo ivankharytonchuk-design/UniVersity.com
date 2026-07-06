@@ -2982,6 +2982,10 @@ label:active .circle{ box-shadow: 0 2px 6px rgba(0,0,0,0.6); }
 
 }
 
+.fy__savegb{
+    border: 10px solid black;
+}
+
 .filter__page__header p{
     color: orange;
 
