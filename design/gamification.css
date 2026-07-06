@@ -1,0 +1,57 @@
+/* Gamification widget — streak + badges (Overview). Remove include to undo. */
+.gmf { animation: uniCardRise .5s cubic-bezier(.2,.8,.3,1) both; }
+.gmf__grid { display: grid; grid-template-columns: minmax(200px, 260px) 1fr; gap: 16px; align-items: stretch; }
+@media (max-width: 720px) { .gmf__grid { grid-template-columns: 1fr; } }
+
+.gmf__streak {
+    display: flex; align-items: center; gap: 16px; padding: 18px 20px; border-radius: 18px;
+    background: radial-gradient(130% 150% at 0% 0%, rgba(245,146,32,.16), transparent 60%),
+                linear-gradient(135deg, #fff, #fff6ea);
+    border: 1px solid var(--border2, #e8c48a);
+    box-shadow: 0 12px 30px -20px rgba(217,124,20,.5);
+}
+[data-theme="dark"] .gmf__streak { background: rgba(255,255,255,.04); border-color: rgba(255,255,255,.1); }
+.gmf__flame {
+    flex: 0 0 auto; width: 56px; height: 56px; border-radius: 16px; display: flex; align-items: center; justify-content: center;
+    font-size: 26px; color: #c9b8a0; background: rgba(0,0,0,.05);
+}
+.gmf__flame--lit {
+    color: #fff; background: linear-gradient(135deg, #ffb03a, #e8551f);
+    box-shadow: 0 10px 26px -8px rgba(232,85,31,.75);
+    animation: gmfFlame 2.4s ease-in-out infinite;
+}
+@keyframes gmfFlame { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-2px) scale(1.06); } }
+.gmf__streak__num { font-family: "Syne","Montserrat",sans-serif; font-weight: 800; font-size: 34px; line-height: 1; color: var(--text, #1c1409); letter-spacing: -.03em; }
+.gmf__streak__num span { font-size: 13px; font-weight: 700; color: var(--text3, #9e7d45); margin-left: 5px; }
+[data-theme="dark"] .gmf__streak__num { color: #f5efe4; }
+.gmf__streak__lbl { font-size: 12px; font-weight: 700; color: var(--text2, #5c4a28); margin-top: 3px; }
+.gmf__streak__best { font-size: 10.5px; font-weight: 600; color: var(--text3, #9e7d45); margin-top: 6px; }
+.gmf__streak__best i { color: var(--orange, #d97c14); }
+
+.gmf__badges {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); gap: 10px;
+    padding: 16px; border-radius: 18px; background: var(--white, #fff); border: 1px solid var(--border, #f0d9b5);
+}
+[data-theme="dark"] .gmf__badges { background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.08); }
+.gmf__badge {
+    display: flex; flex-direction: column; align-items: center; gap: 7px; text-align: center; padding: 6px 4px;
+    opacity: .5; filter: grayscale(.6); transition: transform .2s cubic-bezier(.34,1.56,.64,1), opacity .2s, filter .2s;
+}
+.gmf__badge.is-got { opacity: 1; filter: none; }
+.gmf__badge:hover { transform: translateY(-3px); }
+.gmf__badge__ic {
+    position: relative; width: 46px; height: 46px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+    font-size: 19px; color: #fff; background: linear-gradient(135deg, var(--border2, #e8c48a), #c9b8a0);
+}
+.gmf__badge.is-got .gmf__badge__ic {
+    background: linear-gradient(135deg, #f7a83a, #d97c14);
+    box-shadow: 0 8px 20px -6px rgba(217,124,20,.7), 0 0 0 1px rgba(255,255,255,.2) inset;
+}
+.gmf__badge__lock {
+    position: absolute; right: -4px; bottom: -4px; width: 18px; height: 18px; border-radius: 50%;
+    background: var(--text3, #9e7d45); color: #fff; font-size: 8px; display: flex; align-items: center; justify-content: center;
+    border: 2px solid var(--white, #fff);
+}
+[data-theme="dark"] .gmf__badge__lock { border-color: #1b160e; }
+.gmf__badge__nm { font-size: 10px; font-weight: 700; color: var(--text2, #5c4a28); line-height: 1.2; }
+[data-theme="dark"] .gmf__badge__nm { color: #cabfa9; }
