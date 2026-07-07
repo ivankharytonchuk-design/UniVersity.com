@@ -20,8 +20,12 @@
     }
     function isFeeder(uni, comp) { return (comp.unis || []).some(function (n) { return norm(n) === norm(uni.name) || (uni.short && norm(n) === norm(uni.short)); }); }
     function prob(uni, comp) {
-        var p = 80 * (TIERF[uni.tier] || 0.5) * fieldMatch(uni, comp) * (isFeeder(uni, comp) ? 1.35 : 1) * (1 - comp.sel * 0.45);
-        return Math.max(3, Math.min(94, Math.round(p)));
+        var ts = TIERF[uni.tier] || 0.5;
+        // Prestige-biased employers drop steeply for less-elite universities; broad
+        // recruiters (low `pre`) stay reachable — so weaker unis get realistic options.
+        var prestigePenalty = 1 - (comp.pre || 0) * (1 - ts);
+        var p = 90 * ts * fieldMatch(uni, comp) * (isFeeder(uni, comp) ? 1.35 : 1) * prestigePenalty * (1 - comp.sel * 0.35);
+        return Math.max(2, Math.min(96, Math.round(p)));
     }
 
     // Resolve a typed name to a uni object (curated first, then the app's UNI list).
@@ -49,12 +53,13 @@
     function chip(txt) { return '<span class="crs__chip">' + esc(txt) + '</span>'; }
     function tierStars(t) { var s = ''; for (var i = 1; i <= 5; i++) s += '<i class="fa-solid fa-star' + (i <= t ? '' : ' crs__star--off') + '"></i>'; return '<span class="crs__stars">' + s + '</span>'; }
 
-    // ── Top-recruiters view ──
+    // ── Top-recruiters view (the current top-10 by market cap) ──
     function companiesHTML() {
-        return '<div class="crs__companies">' + D.companies.map(function (c, i) {
+        var top = D.companies.filter(function (c) { return c.rank; }).sort(function (a, b) { return a.rank - b.rank; });
+        return '<div class="crs__companies">' + top.map(function (c, i) {
             return '<div class="crs__co" style="--d:' + (i * 45) + 'ms;--c:' + c.color + '">' +
-                '<div class="crs__co__hd">' + logo(c) + '<div><div class="crs__co__nm">' + esc(c.name) + '</div><div class="crs__co__sec">' + esc(c.sector) + '</div></div>' +
-                    '<span class="crs__co__hard" title="Selectivity">' + Math.round(c.sel * 100) + '%<small>bar</small></span></div>' +
+                '<span class="crs__rank">#' + c.rank + '</span>' +
+                '<div class="crs__co__hd">' + logo(c) + '<div class="crs__co__id"><div class="crs__co__nm">' + esc(c.name) + '</div><div class="crs__co__sec">' + esc(c.sector) + '</div></div></div>' +
                 '<div class="crs__co__lbl">Usually studied</div><div class="crs__chips">' + c.degrees.slice(0, 3).map(chip).join('') + '</div>' +
                 '<div class="crs__co__lbl">Top feeder universities</div><div class="crs__chips">' + c.unis.slice(0, 4).map(function (u) { var uu = resolveUni(u); return '<span class="crs__chip crs__chip--uni">' + esc(uu ? (uu.short || uu.name) : u) + '</span>'; }).join('') + '</div>' +
             '</div>';
@@ -63,7 +68,10 @@
 
     // ── University-result view ──
     function resultHTML(uni) {
-        var ranked = D.companies.map(function (c) { return { c: c, p: prob(uni, c), feeder: isFeeder(uni, c) }; }).sort(function (a, b) { return b.p - a.p; });
+        // Rank ALL employers (not just the mega-caps) so every university gets
+        // realistic, reachable destinations — then show the top matches.
+        var ranked = D.companies.map(function (c) { return { c: c, p: prob(uni, c), feeder: isFeeder(uni, c) }; })
+            .sort(function (a, b) { return b.p - a.p; }).slice(0, 10);
         var best = ranked[0];
         var rows = ranked.map(function (r, i) {
             var role = r.c.roles[0];
@@ -126,7 +134,7 @@
             '<div class="crs__panel">' +
                 '<button class="crs__close" title="Close"><i class="fa-solid fa-xmark"></i></button>' +
                 '<div class="crs__hero">' +
-                    '<span class="crs__hero__orb"></span>' +
+                    '<span class="crs__hero__bg"><span class="crs__hero__orb"></span></span>' +
                     '<div class="crs__hero__in"><div class="crs__eyebrow"><i class="fa-solid fa-briefcase"></i> Career paths</div>' +
                     '<h2 class="crs__title">Where can your degree take you?</h2>' +
                     '<p class="crs__sub">See who the world’s top employers recruit — then search your university to see your likely destinations.</p>' +

@@ -7,8 +7,10 @@
 .crs__close { position: absolute; top: 16px; right: 16px; z-index: 3; width: 36px; height: 36px; border: none; border-radius: 50%; background: rgba(255,255,255,.18); color: #fff; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center; -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); transition: background .2s, transform .2s; }
 .crs__close:hover { background: rgba(255,255,255,.32); transform: rotate(90deg); }
 
-/* Hero */
-.crs__hero { position: relative; overflow: hidden; padding: 30px 30px 26px; color: #fff; background: linear-gradient(135deg, #241a3a 0%, #3a2560 45%, #6c3fb0 100%); }
+/* Hero — NOT clipped (so the search dropdown can overflow it); the orb is
+   clipped by its own layer instead. */
+.crs__hero { position: relative; padding: 30px 30px 26px; color: #fff; background: linear-gradient(135deg, #241a3a 0%, #3a2560 45%, #6c3fb0 100%); }
+.crs__hero__bg { position: absolute; inset: 0; overflow: hidden; border-radius: 24px 24px 0 0; pointer-events: none; z-index: 0; }
 .crs__hero__orb { position: absolute; width: 320px; height: 320px; right: -80px; top: -120px; border-radius: 50%; background: radial-gradient(circle, rgba(245,146,32,.55), transparent 68%); filter: blur(30px); animation: crsFloat 12s ease-in-out infinite; }
 @keyframes crsFloat { 0%,100% { transform: translate(0,0); } 50% { transform: translate(-26px,22px); } }
 .crs__hero__in { position: relative; z-index: 1; }
@@ -19,7 +21,7 @@
 .crs__search > i { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #8a7fb0; font-size: 14px; }
 .crs__search input { width: 100%; padding: 14px 16px 14px 42px; border-radius: 14px; border: none; font-family: inherit; font-size: 14px; font-weight: 600; color: #1c1409; background: #fff; box-shadow: 0 12px 30px -12px rgba(0,0,0,.5); }
 .crs__search input:focus { outline: none; box-shadow: 0 0 0 3px rgba(245,146,32,.5), 0 12px 30px -12px rgba(0,0,0,.5); }
-.crs__sugs { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 5; display: none; background: #fff; border: 1px solid var(--border, #f0d9b5); border-radius: 14px; overflow: hidden; box-shadow: 0 20px 44px -18px rgba(0,0,0,.5); animation: crsDrop .2s ease; }
+.crs__sugs { position: absolute; top: calc(100% + 8px); left: 0; right: 0; z-index: 40; display: none; background: #fff; border: 1px solid var(--border, #f0d9b5); border-radius: 14px; overflow: hidden; box-shadow: 0 20px 44px -18px rgba(0,0,0,.5); animation: crsDrop .2s ease; }
 @keyframes crsDrop { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: none; } }
 [data-theme="dark"] .crs__sugs { background: #221b12; border-color: rgba(255,255,255,.12); }
 .crs__sug { width: 100%; display: flex; align-items: center; gap: 10px; padding: 11px 14px; border: none; background: none; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600; color: var(--text, #1c1409); text-align: left; transition: background .15s; }
@@ -44,7 +46,8 @@
 /* Companies grid */
 .crs__companies { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
 @media (max-width: 680px) { .crs__companies { grid-template-columns: 1fr; } }
-.crs__co { --c: #6c3fb0; padding: 15px; border-radius: 16px; background: var(--white, #fff); border: 1px solid var(--border, #f0d9b5); box-shadow: 0 10px 26px -20px rgba(20,24,40,.5); opacity: 0; transform: translateY(12px); animation: crsIn .5s cubic-bezier(.22,1,.36,1) forwards; animation-delay: var(--d); transition: transform .2s, box-shadow .2s, border-color .2s; }
+.crs__co { --c: #6c3fb0; position: relative; padding: 15px; border-radius: 16px; background: var(--white, #fff); border: 1px solid var(--border, #f0d9b5); box-shadow: 0 10px 26px -20px rgba(20,24,40,.5); opacity: 0; transform: translateY(12px); animation: crsIn .5s cubic-bezier(.22,1,.36,1) forwards; animation-delay: var(--d); transition: transform .2s, box-shadow .2s, border-color .2s; }
+.crs__rank { position: absolute; top: 12px; right: 14px; font-family: "Syne","Montserrat",sans-serif; font-weight: 800; font-size: 12px; color: #fff; background: var(--c); padding: 2px 9px; border-radius: 99px; box-shadow: 0 4px 10px -4px var(--c); }
 @keyframes crsIn { to { opacity: 1; transform: none; } }
 .crs__co:hover { transform: translateY(-4px); border-color: var(--c); box-shadow: 0 20px 36px -20px var(--c); }
 [data-theme="dark"] .crs__co { background: rgba(255,255,255,.03); border-color: rgba(255,255,255,.08); }
@@ -84,3 +87,8 @@
 .crs__bar { height: 7px; border-radius: 99px; background: var(--surface, #fff5e8); overflow: hidden; } [data-theme="dark"] .crs__bar { background: rgba(255,255,255,.08); }
 .crs__bar i { display: block; height: 100%; width: 0; border-radius: 99px; transition: width 1s cubic-bezier(.22,1,.36,1); }
 .crs__dest__p { flex: 0 0 auto; font-family: "Syne","Montserrat",sans-serif; font-weight: 800; font-size: 20px; letter-spacing: -.02em; } .crs__dest__p small { font-size: 11px; margin-left: 1px; }
+
+/* keep the company name clear of the rank badge */
+.crs__co__hd { padding-right: 40px; }
+.crs__co__id { min-width: 0; }
+.crs__co__nm { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
