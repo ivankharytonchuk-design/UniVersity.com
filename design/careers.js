@@ -46,16 +46,24 @@
     }
 
     function findCompany(name) { return D.companies.find(function (c) { return c.name === name; }) || null; }
-    // Real company logo via the Clearbit Logo API, with a coloured-monogram fallback.
+    // Real company logos via public logo services (Clearbit → the site's own
+    // high-res icon). The coloured monogram is a last resort only if both fail
+    // (e.g. no network).
     function logo(c, sz) {
         var style = sz ? 'width:' + sz + 'px;height:' + sz + 'px' : '';
         if (c.domain) {
-            return '<span class="crs__logo crs__logo--img" data-mono="' + esc(initials(c.name)) + '" data-c="' + c.color + '" style="' + style + '">' +
-                '<img src="https://logo.clearbit.com/' + c.domain + '?size=128" alt="' + esc(c.name) + '" loading="lazy" onerror="crsLogoFail(this)"></span>';
+            return '<span class="crs__logo crs__logo--img" data-mono="' + esc(initials(c.name)) + '" data-c="' + c.color + '" data-domain="' + esc(c.domain) + '" style="' + style + '">' +
+                '<img src="https://logo.clearbit.com/' + c.domain + '?size=128" alt="' + esc(c.name) + ' logo" loading="lazy" data-try="0" onerror="crsLogoFail(this)"></span>';
         }
         return '<span class="crs__logo crs__logo--mono" style="background:' + c.color + ';' + style + '">' + esc(initials(c.name)) + '</span>';
     }
     window.crsLogoFail = function (img) {
+        var t = img.getAttribute('data-try') || '0';
+        if (t === '0') { // try the site's real favicon/icon before giving up
+            img.setAttribute('data-try', '1');
+            img.src = 'https://www.google.com/s2/favicons?sz=128&domain=' + img.getAttribute('data-domain');
+            return;
+        }
         var s = img.parentNode; if (!s) return;
         s.classList.remove('crs__logo--img'); s.classList.add('crs__logo--mono');
         s.style.background = s.getAttribute('data-c') || '#6c3fb0';
