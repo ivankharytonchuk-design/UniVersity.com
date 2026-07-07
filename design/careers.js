@@ -45,11 +45,22 @@
                list.find(function (u) { return norm(u.name).indexOf(n) !== -1 || (u.short && norm(u.short).indexOf(n) !== -1); }) || null;
     }
 
+    function findCompany(name) { return D.companies.find(function (c) { return c.name === name; }) || null; }
+    // Real company logo via the Clearbit Logo API, with a coloured-monogram fallback.
     function logo(c, sz) {
-        var cls = 'crs__logo' + (c.icon ? '' : ' crs__logo--mono');
-        return '<span class="' + cls + '" style="background:' + c.color + (sz ? ';width:' + sz + 'px;height:' + sz + 'px' : '') + '">' +
-            (c.icon ? '<i class="fa-brands ' + c.icon + '"></i>' : esc(initials(c.name))) + '</span>';
+        var style = sz ? 'width:' + sz + 'px;height:' + sz + 'px' : '';
+        if (c.domain) {
+            return '<span class="crs__logo crs__logo--img" data-mono="' + esc(initials(c.name)) + '" data-c="' + c.color + '" style="' + style + '">' +
+                '<img src="https://logo.clearbit.com/' + c.domain + '?size=128" alt="' + esc(c.name) + '" loading="lazy" onerror="crsLogoFail(this)"></span>';
+        }
+        return '<span class="crs__logo crs__logo--mono" style="background:' + c.color + ';' + style + '">' + esc(initials(c.name)) + '</span>';
     }
+    window.crsLogoFail = function (img) {
+        var s = img.parentNode; if (!s) return;
+        s.classList.remove('crs__logo--img'); s.classList.add('crs__logo--mono');
+        s.style.background = s.getAttribute('data-c') || '#6c3fb0';
+        s.textContent = s.getAttribute('data-mono') || '?';
+    };
     function chip(txt) { return '<span class="crs__chip">' + esc(txt) + '</span>'; }
     function tierStars(t) { var s = ''; for (var i = 1; i <= 5; i++) s += '<i class="fa-solid fa-star' + (i <= t ? '' : ' crs__star--off') + '"></i>'; return '<span class="crs__stars">' + s + '</span>'; }
 
@@ -57,12 +68,14 @@
     function companiesHTML() {
         var top = D.companies.filter(function (c) { return c.rank; }).sort(function (a, b) { return a.rank - b.rank; });
         return '<div class="crs__companies">' + top.map(function (c, i) {
-            return '<div class="crs__co" style="--d:' + (i * 45) + 'ms;--c:' + c.color + '">' +
+            return '<button class="crs__co" data-co="' + esc(c.name) + '" style="--d:' + (i * 45) + 'ms;--c:' + c.color + '">' +
                 '<span class="crs__rank">#' + c.rank + '</span>' +
                 '<div class="crs__co__hd">' + logo(c) + '<div class="crs__co__id"><div class="crs__co__nm">' + esc(c.name) + '</div><div class="crs__co__sec">' + esc(c.sector) + '</div></div></div>' +
+                '<div class="crs__co__meta"><span><i class="fa-solid fa-location-dot"></i> ' + esc(c.city) + ', ' + esc(c.country) + '</span><span><i class="fa-solid fa-sack-dollar"></i> ' + esc(c.salary) + '</span></div>' +
                 '<div class="crs__co__lbl">Usually studied</div><div class="crs__chips">' + c.degrees.slice(0, 3).map(chip).join('') + '</div>' +
                 '<div class="crs__co__lbl">Top feeder universities</div><div class="crs__chips">' + c.unis.slice(0, 4).map(function (u) { var uu = resolveUni(u); return '<span class="crs__chip crs__chip--uni">' + esc(uu ? (uu.short || uu.name) : u) + '</span>'; }).join('') + '</div>' +
-            '</div>';
+                '<span class="crs__co__more">Details <i class="fa-solid fa-arrow-right"></i></span>' +
+            '</button>';
         }).join('') + '</div>';
     }
 
@@ -75,13 +88,13 @@
         var best = ranked[0];
         var rows = ranked.map(function (r, i) {
             var role = r.c.roles[0];
-            return '<div class="crs__dest" style="--d:' + (i * 40) + 'ms;--c:' + r.c.color + '">' +
+            return '<button class="crs__dest" data-co="' + esc(r.c.name) + '" style="--d:' + (i * 40) + 'ms;--c:' + r.c.color + '">' +
                 logo(r.c, 40) +
                 '<div class="crs__dest__mid"><div class="crs__dest__nm">' + esc(r.c.name) + (r.feeder ? ' <span class="crs__feeder"><i class="fa-solid fa-bolt"></i> feeder</span>' : '') + '</div>' +
                     '<div class="crs__dest__role">' + esc(role) + ' · ' + esc(r.c.sector) + '</div>' +
                     '<div class="crs__bar"><i data-w="' + r.p + '" style="background:linear-gradient(90deg,' + r.c.color + ',' + r.c.color + 'cc)"></i></div></div>' +
                 '<div class="crs__dest__p" style="color:' + r.c.color + '">' + r.p + '<small>%</small></div>' +
-            '</div>';
+            '</button>';
         }).join('');
         return '<div class="crs__result">' +
             '<div class="crs__uni">' +
@@ -161,11 +174,54 @@
         inp.addEventListener('input', function () { showSug(inp.value); });
         inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { var f = sugBox.querySelector('.crs__sug'); if (f) selectUni(f.dataset.name); else selectUni(inp.value); } });
         el.addEventListener('click', function (e) {
+            var co = e.target.closest('[data-co]'); if (co) { openCompany(findCompany(co.dataset.co)); return; }
             var s = e.target.closest('.crs__sug'); if (s) selectUni(s.dataset.name);
             else if (!e.target.closest('.crs__search')) hideSug();
         });
     }
-    function onKey(e) { if (e.key === 'Escape') close(); }
+
+    // ── Company detail modal (stacked above the careers modal) ──
+    function diffLabel(sel) { return sel >= 0.85 ? 'Extremely hard' : sel >= 0.7 ? 'Very hard' : sel >= 0.55 ? 'Hard' : sel >= 0.4 ? 'Moderate' : 'Accessible'; }
+    var coEl = null;
+    function openCompany(c) {
+        if (!c) return;
+        coEl = document.createElement('div');
+        coEl.className = 'crs__co__ov';
+        var stat = function (ic, v, l) { return '<div class="crs__cx__stat"><i class="fa-solid ' + ic + '"></i><div><b>' + v + '</b><span>' + l + '</span></div></div>'; };
+        coEl.innerHTML =
+            '<div class="crs__cx" style="--c:' + c.color + '">' +
+                '<button class="crs__cx__close" title="Close"><i class="fa-solid fa-xmark"></i></button>' +
+                '<div class="crs__cx__hd">' + logo(c, 62) +
+                    '<div class="crs__cx__id"><div class="crs__cx__nm">' + esc(c.name) + (c.rank ? ' <span class="crs__cx__rank">#' + c.rank + ' by value</span>' : '') + '</div>' +
+                        '<div class="crs__cx__sec">' + esc(c.sector) + '</div></div>' +
+                    (c.domain ? '<a class="crs__cx__site" href="https://' + c.domain + '" target="_blank" rel="noopener"><i class="fa-solid fa-arrow-up-right-from-square"></i> Website</a>' : '') +
+                '</div>' +
+                '<div class="crs__cx__stats">' +
+                    stat('fa-location-dot', esc(c.city), esc(c.country)) +
+                    stat('fa-sack-dollar', esc(c.salary), 'avg early-career pay') +
+                    stat('fa-gauge-high', diffLabel(c.sel), 'entry difficulty') +
+                    stat('fa-user-graduate', c.degrees.length + ' fields', 'commonly hired') +
+                '</div>' +
+                '<div class="crs__cx__about">' + esc(c.about) + '</div>' +
+                '<div class="crs__cx__lbl"><i class="fa-solid fa-thumbs-up"></i> Why students consider it</div>' +
+                '<ul class="crs__cx__perks">' + (c.perks || []).map(function (p) { return '<li><i class="fa-solid fa-check"></i> ' + esc(p) + '</li>'; }).join('') + '</ul>' +
+                '<div class="crs__cx__grid">' +
+                    '<div><div class="crs__cx__lbl">Roles they hire</div><div class="crs__chips">' + c.roles.map(chip).join('') + '</div></div>' +
+                    '<div><div class="crs__cx__lbl">Degrees they want</div><div class="crs__chips">' + c.degrees.map(chip).join('') + '</div></div>' +
+                '</div>' +
+                '<div class="crs__cx__lbl">Where they recruit from</div><div class="crs__chips">' + c.unis.map(function (u) { var uu = resolveUni(u); return '<span class="crs__chip crs__chip--uni">' + esc(uu ? (uu.short || uu.name) : u) + '</span>'; }).join('') + '</div>' +
+                '<div class="crs__cx__note"><i class="fa-solid fa-circle-info"></i> Figures are approximate early-career averages and vary by role, country and year.</div>' +
+            '</div>';
+        document.body.appendChild(coEl);
+        requestAnimationFrame(function () { coEl.classList.add('open'); });
+        function cclose() { if (!coEl) return; coEl.classList.remove('open'); var e = coEl; setTimeout(function () { e.remove(); }, 240); coEl = null; document.removeEventListener('keydown', cKey); }
+        function cKey(ev) { if (ev.key === 'Escape') { ev.stopPropagation(); cclose(); } }
+        coEl.addEventListener('mousedown', function (ev) { if (ev.target === coEl) cclose(); });
+        coEl.querySelector('.crs__cx__close').addEventListener('click', cclose);
+        document.addEventListener('keydown', cKey);
+    }
+
+    function onKey(e) { if (e.key === 'Escape') { if (coEl) return; close(); } }
     function close() { if (!el) return; document.removeEventListener('keydown', onKey); el.classList.remove('open'); document.body.style.overflow = ''; var e = el; setTimeout(function () { e.remove(); }, 280); el = null; curUni = null; tab = 'top'; }
     window.openCareers = open;
 })();
