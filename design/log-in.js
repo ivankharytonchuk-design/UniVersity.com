@@ -289,19 +289,69 @@ function localSignin(id, pw, migrate) {
     }
 }
 
+// How many app-data keys exist on this device for a given account id.
+function idDataScore(id) {
+    if (!id) return 0;
+    var suf = '_' + id, n = 0;
+    try {
+        for (var i = 0; i < localStorage.length; i++) {
+            var k = localStorage.key(i);
+            if (k && k.indexOf('us_') === 0 && k.slice(-suf.length) === suf) n++;
+        }
+    } catch (e) {}
+    return n;
+}
+// Pick the id the user's data actually lives under, so re-logging in never lands
+// on an empty "different account". Different login methods (server vs local vs a
+// local→server migration) can hand back different ids for the same person; this
+// reconciles them by email and by where the data physically is.
+// Bulletproof: always returns a valid, truthy id and never throws.
+function canonicalId(u) {
+    try {
+        u = u || {};
+        var primary = u.id || null;
+        var candidates = [];
+        if (primary) candidates.push(primary);
+        try {
+            DB.getAll().forEach(function (a) {
+                if (a && a.id && a.email && u.email && a.email.toLowerCase() === String(u.email).toLowerCase() && candidates.indexOf(a.id) === -1) candidates.push(a.id);
+            });
+        } catch (e) {}
+        // 1) land on the candidate that actually holds the most data on this device
+        var best = null, bestScore = 0;
+        candidates.forEach(function (id) { var s = idDataScore(id); if (s > bestScore) { bestScore = s; best = id; } });
+        if (best) return best;
+        // 2) brand-new here → use the primary id (store it locally so it stays stable)
+        if (primary) {
+            try { if (u.email && !DB.findByEmail(u.email)) DB.add({ id: primary, email: u.email, username: u.username, createdAt: new Date().toISOString(), server: true }); } catch (e) {}
+            return primary;
+        }
+    } catch (e) {}
+    // 3) last resort — never return null/undefined (that would orphan all data)
+    return (u && u.id) || ('u_' + (String((u && u.email) || (u && u.username) || 'guest')).toLowerCase().replace(/[^a-z0-9]/g, ''));
+}
+
 // Finalise auth: set the session token (+ pull/merge the account's data), store
 // the session and redirect.
 function onAuthed(data, remember, greet) {
-    var user = data.user || data;
-    var done = function () {
-        Session.set(user, remember);
-        showToast(greet + (user.username || '') + '!');
+    var raw = (data && (data.user || data)) || {};
+    var finished = false;
+    var finish = function () {
+        if (finished) return; finished = true;
+        try {
+            // Resolve AFTER the server merge, so we can see where the data really is.
+            var user = { id: canonicalId(raw), username: raw.username, email: raw.email };
+            Session.set(user, remember);
+            showToast(greet + (user.username || '') + '!');
+        } catch (e) { /* never block the redirect on a reconcile hiccup */ }
         setTimeout(function () { window.location.href = postAuthDest(); }, 900);
     };
-    if (data.token && window.UserSync) {
+    if (data && data.token && window.UserSync) {
         UserSync.setToken(data.token);
-        UserSync.mergeOnLogin().then(done, done);
-    } else { done(); }
+        // Don't let a slow/hanging merge trap the user on the login screen.
+        var guard = setTimeout(finish, 6000);
+        UserSync.mergeOnLogin().then(function () { clearTimeout(guard); finish(); }, function () { clearTimeout(guard); finish(); });
+    } else { finish(); }
 }
 
 signupForm.addEventListener('submit', function (e) {

@@ -1,0 +1,36 @@
+name: Daily education news refresh
+
+# Rebuilds "Today in Education" (the daily top-10 shown in the University Feed →
+# News tab) once every 24h, in the cloud, independent of your Mac.
+#
+# It pings the DEPLOYED server, which runs the news.js agent (fetch → AI curate →
+# images) and caches the result so /api/news serves it instantly to every user.
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   NEWS_CRON_URL      e.g. https://uniscout.onrender.com/api/news/cron
+#   DIGEST_CRON_TOKEN  the same token your server already uses for the digest cron
+on:
+  schedule:
+    # Every day at 05:30 UTC (before most of Europe/US starts their day). GitHub
+    # cron is UTC only and scheduled runs can be delayed 5-30 min.
+    - cron: "0 9 * * *"     # daily ~11:00 CEST (09:00 UTC); GitHub cron is best-effort
+  workflow_dispatch: {}
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger the news rebuild on the server
+        env:
+          NEWS_CRON_URL: ${{ secrets.NEWS_CRON_URL }}
+          DIGEST_CRON_TOKEN: ${{ secrets.DIGEST_CRON_TOKEN }}
+        run: |
+          if [ -z "$NEWS_CRON_URL" ] || [ -z "$DIGEST_CRON_TOKEN" ]; then
+            echo "::error::Set NEWS_CRON_URL and DIGEST_CRON_TOKEN repo secrets."
+            exit 1
+          fi
+          # Generous timeout so a sleeping free host has time to wake. The server
+          # replies immediately and rebuilds in the background.
+          curl -fsS --max-time 120 "${NEWS_CRON_URL}?token=${DIGEST_CRON_TOKEN}"
+          echo
+          echo "News refresh triggered."

@@ -702,7 +702,6 @@ if (countryHeadings && countryHeadings.length) {
   countryHeadings.forEach(h3 => {
     h3.style.cursor = 'pointer';
     h3.addEventListener('click', function (e) {
-
       showExplanation();
     });
   });

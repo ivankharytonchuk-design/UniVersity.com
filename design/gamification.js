@@ -1,5 +1,5 @@
 /* ════════════════════════════════════════════════════════════════════
-   Gamification — daily streak + achievement badges (Overview widget)
+   Gamification — daily streak + saved scholarships + saved career odds (Overview widget)
    Self-contained: remove gamification.js/.css includes to undo.
    ════════════════════════════════════════════════════════════════════ */
 (function () {
@@ -14,13 +14,19 @@
     function streak() {
         var s;
         try { s = JSON.parse(localStorage.getItem(K('us_streak')) || 'null'); } catch (e) { s = null; }
-        if (!s || !s.last) s = { last: null, count: 0, best: 0 };
+        if (!s || typeof s !== 'object') s = { last: null, count: 0, best: 0 };
+        s.count = s.count || 0;
+        s.best  = s.best || 0;
         var t = today();
         if (s.last !== t) {
             var gap = s.last ? daysBetween(s.last, t) : 999;
-            s.count = (gap === 1) ? (s.count + 1) : 1;
-            s.last = t;
-            s.best = Math.max(s.best || 0, s.count);
+            if (gap === 1)      s.count = s.count + 1;   // consecutive day → extend
+            else if (gap <= 0)  { /* clock skew / already-counted: keep count, don't rewind `last` */ }
+            else                s.count = 1;             // a full day (or more) missed → restart at today
+            // Never move `last` backwards (guards against a stale/future value).
+            if (gap > 0 || !s.last) s.last = t;
+            if (s.count < 1) s.count = 1;
+            s.best = Math.max(s.best, s.count);
             try { localStorage.setItem(K('us_streak'), JSON.stringify(s)); } catch (e) {}
         }
         return s;
@@ -47,6 +53,26 @@
         ];
     }
 
+    // The streak card: a layered flame (it grows with the streak), embers, and the last seven days
+    function streakHTML(st) {
+        var n = st.count || 0, best = Math.max(st.best || 0, n), days = [], d0 = new Date();
+        var W = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+        for (var i = 6; i >= 0; i--) { var d = new Date(d0); d.setDate(d0.getDate() - i); days.push({ l: W[d.getDay()], on: i < n, today: i === 0 }); }
+        var next = [3, 7, 14, 30, 60, 100].filter(function (x) { return x > n; })[0];
+        var heat = Math.min(1, n / 14);
+        return '<div class="gmf__streak gst' + (n >= 7 ? ' is-hot' : '') + '" style="--heat:' + heat.toFixed(2) + '" title="Come back every day to keep it alive">' +
+            '<div class="gst__fire" aria-hidden="true">' +
+                '<span class="gst__glow"></span>' +
+                '<span class="gst__f gst__f--1"></span><span class="gst__f gst__f--2"></span><span class="gst__f gst__f--3"></span>' +
+                '<span class="gst__em" style="--x:-7px;--d:0s"></span><span class="gst__em" style="--x:6px;--d:.7s"></span><span class="gst__em" style="--x:0px;--d:1.4s"></span>' +
+            '</div>' +
+            '<div class="gst__meta">' +
+                '<div class="gst__num"><b>' + n + '</b><span>day' + (n === 1 ? '' : 's') + ' in a row</span></div>' +
+                '<ol class="gst__week">' + days.map(function (x, k) { return '<li class="' + (x.on ? 'on' : '') + (x.today ? ' today' : '') + '" style="--k:' + k + '"><i></i><small>' + x.l + '</small></li>'; }).join('') + '</ol>' +
+                '<div class="gst__best"><i class="fa-solid fa-trophy"></i> Best ' + best + (next ? ' · next goal ' + next : '') + '</div>' +
+            '</div></div>';
+    }
+
     function render() {
         var host = document.getElementById('tabOverview');
         if (!host) return;
@@ -65,23 +91,16 @@
         }
         mount.innerHTML =
             '<div class="gmf__grid">' +
-                '<div class="gmf__streak">' +
-                    '<div class="gmf__flame' + (st.count > 0 ? ' gmf__flame--lit' : '') + '"><i class="fa-solid fa-fire"></i></div>' +
-                    '<div class="gmf__streak__meta">' +
-                        '<div class="gmf__streak__num">' + st.count + '<span>day' + (st.count === 1 ? '' : 's') + '</span></div>' +
-                        '<div class="gmf__streak__lbl">Daily streak</div>' +
-                        '<div class="gmf__streak__best"><i class="fa-solid fa-trophy"></i> Best: ' + (st.best || st.count) + ' days</div>' +
-                    '</div>' +
-                '</div>' +
+                streakHTML(st) +
                 '<div class="gmf__actions">' +
-                    '<button class="gmf__act gmf__act--snap" id="gmfSnap"><span class="gmf__act__ic"><i class="fa-solid fa-wand-magic-sparkles"></i></span>' +
-                        '<span class="gmf__act__tx"><b>Your snapshot</b><small>Progress &amp; your next step</small></span><i class="fa-solid fa-arrow-right gmf__act__go"></i></button>' +
-                    '<button class="gmf__act gmf__act--career" id="gmfCareer"><span class="gmf__act__ic"><i class="fa-solid fa-briefcase"></i></span>' +
-                        '<span class="gmf__act__tx"><b>Career paths</b><small>Top recruiters &amp; your odds</small></span><i class="fa-solid fa-arrow-right gmf__act__go"></i></button>' +
+                    // Saved scholarships — filled by scholarships.js (renderSavedScholarships)
+                    '<section class="gmf-sch" id="gmfSch" aria-label="Saved scholarships"></section>' +
+                    // Saved companies + your odds — filled by careerOdds.js (renderSavedCareers)
+                    '<section class="gmf-car" id="gmfCar" aria-label="Career paths"></section>' +
                 '</div>' +
             '</div>';
-        var snap = mount.querySelector('#gmfSnap'); if (snap) snap.addEventListener('click', function () { if (window.openHub) window.openHub(); });
-        var car = mount.querySelector('#gmfCareer'); if (car) car.addEventListener('click', function () { if (window.openCareers) window.openCareers(); });
+        if (window.renderSavedScholarships) window.renderSavedScholarships(mount.querySelector('#gmfSch'));
+        if (window.renderSavedCareers) window.renderSavedCareers(mount.querySelector('#gmfCar'));
     }
 
     window.renderGamification = render;

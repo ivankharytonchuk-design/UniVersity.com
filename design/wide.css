@@ -1,0 +1,27 @@
+/* ════════════════════════════════════════════════════════════════════
+   Big screens (MacBook 1440–1728 px wide, desktop monitors).
+   The app used to sit in a 1280 px column in the middle, which left wide
+   empty margins on a Mac. Pages now spread out (up to 1720 px) and the gap
+   between each page's left-hand text and its right-hand card grows with
+   the screen, so the two sides sit out towards the edges.
+   ════════════════════════════════════════════════════════════════════ */
+@media (min-width: 1280px) {
+    .mp__main { max-width: 1720px; padding-left: clamp(36px, 4.2vw, 88px); padding-right: clamp(36px, 4.2vw, 88px); }
+    #tabGradebook { max-width: 1720px !important; padding-left: clamp(36px, 4.2vw, 88px); padding-right: clamp(36px, 4.2vw, 88px); }
+    /* Overview: greeting on the left, destination + "Next up" on the right */
+    .ov-head { grid-template-columns: minmax(0, 1fr) minmax(460px, 540px); column-gap: clamp(56px, 8vw, 200px); }
+    /* Gradebook: the average card (with its black hole) — kept a little narrower on
+       MacBook-size screens so it doesn't dominate the page (and traces fewer pixels) */
+    #tabGradebook .gk-head { grid-template-columns: minmax(380px, 1fr) minmax(0, 780px); column-gap: clamp(48px, 5vw, 120px); }
+    /* Deadlines and Chances heroes */
+    .dt-head { grid-template-columns: minmax(0, 1fr) minmax(0, 620px); column-gap: clamp(56px, 8vw, 200px); }
+    .ch-hero { grid-template-columns: minmax(0, 1fr) 460px; column-gap: clamp(40px, 7vw, 160px); }
+}
+@media (min-width: 1680px) {
+    .ov-head { grid-template-columns: minmax(0, 1fr) 560px; }
+    #tabGradebook .gk-head { grid-template-columns: minmax(420px, 1fr) minmax(0, 860px); }
+}
+
+/* cards drifting in place (uiFloat.js): lift the one you're on above its neighbours */
+.fx-drift { backface-visibility: hidden; }
+.fx-drift:hover, .fx-drift:focus-within { z-index: 30; }

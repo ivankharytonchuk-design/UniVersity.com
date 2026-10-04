@@ -18,11 +18,12 @@
 require('dotenv').config();
 
 const path = require('path');
+const fs = require('fs');
 const express = require('express');
 const cors = require('cors');
 
 const {
-  upsertUser, getUserById, getUserByCustomer, setCustomerId, setManualElite,
+  upsertUser, getUserById, getUserByEmail, getUserByCustomer, setCustomerId, setManualElite,
   upsertSubscription, getLatestSubByUser, getActiveSubByUser,
   setSetting, getSetting,
 } = require('./db');
@@ -72,6 +73,9 @@ function userIsElite(userId) {
 // ── Helpers ───────────────────────────────────────────────────
 const log = (...a) => console.log(new Date().toISOString(), ...a);
 const errlog = (...a) => console.error(new Date().toISOString(), ...a);
+// A stray rejected promise (a dropped fetch, a DB hiccup) must not take the whole
+// server down — Node exits on unhandled rejections by default.
+process.on('unhandledRejection', (e) => errlog('unhandled rejection:', (e && (e.stack || e.message)) || e));
 
 /** Ensure a recurring €15/year Price exists; create + remember it if needed. */
 let cachedPriceId = null;
@@ -166,6 +170,7 @@ async function syncSubscription(subscriptionId) {
 // ── App ───────────────────────────────────────────────────────
 const app = express();
 app.use(cors());
+app.use(require('compression')());   // gzip text assets (CSS/JS/HTML) — ~80% smaller over the wire
 
 // IMPORTANT: the webhook needs the RAW body for signature verification, so it
 // must be registered BEFORE the global express.json() parser.
@@ -229,7 +234,7 @@ app.post('/webhook', express.raw({ type: 'application/json' }), async (req, res)
 });
 
 // JSON parser for the rest of the API
-app.use(express.json());
+app.use(express.json({ limit: '8mb' }));   // synced values can hold a photo (data URL) — 100kb default rejected them
 
 // Expose the publishable key (safe) to the frontend
 app.get('/api/config', (_req, res) => {
@@ -310,11 +315,15 @@ app.get('/api/subscription/status', (req, res) => {
   const username = req.query.username;
 
   // Persist the user in the DB so manual Elite grants survive logout/login.
+  // The same e-mail on a second device arrives with a new local id: keep the e-mail on
+  // the row that already owns it (it's UNIQUE) and look Elite up through that row.
   let user = getUserById(userId);
+  const owner = email ? getUserByEmail(email) : null;
+  const emailFree = !owner || owner.id === userId;
   if (email || username || !user) {
     user = upsertUser({
       id: userId,
-      email: email || (user && user.email),
+      email: emailFree ? (email || (user && user.email) || null) : ((user && user.email) || null),
       username: username || (user && user.username),
     });
   }
@@ -325,9 +334,10 @@ app.get('/api/subscription/status', (req, res) => {
     user = getUserById(userId);
   }
 
-  const sub = getLatestSubByUser(userId);
+  const sub = getLatestSubByUser(userId) || (owner && owner.id !== userId ? getLatestSubByUser(owner.id) : null);
   const subActive = !!(sub && ELITE_STATUSES.includes(sub.status));
-  const manual = !!(user && user.manual_elite);
+  const byMail = owner || (user && user.email ? getUserByEmail(user.email) : null);   // a grant made from the admin panel follows the e-mail
+  const manual = !!((user && user.manual_elite) || (byMail && byMail.manual_elite));
   const elite = subActive || manual;
 
   res.json({
@@ -470,11 +480,36 @@ app.get('/api/elite/content', requireElite, (_req, res) => {
 const qdrant = require('./qdrant');
 const synthesize = require('./synthesize');
 const digest = require('./digest');
+const news = require('./news');
+const feeds = require('./feeds');
 const store = require('./store');
 
+// Admin panel API (admin.js): server-side login, sessions, users, Elite, AI log, health, audit.
+const adminDeps = { db: require('./db'), store, stripe, ELITE_STATUSES, log };
+const adminApi = require('./admin')(app, adminDeps);
+
+// Housing scam check (community.js).
+const communityDeps = { store, synth: synthesize, log, errlog };
+require('./community')(app, communityDeps);
+// Admissions data system: official data + public applicant self-reports found by a
+// background research job (double-checked by a larger model, admin-reviewable).
+const admissionsDeps = { store, log, errlog, admin: adminApi };
+const admissions = require('./admissions')(app, admissionsDeps);
+// Apply workspace (applications.js): applications, checklist, documents, writing
+// versions, decisions/offers and the application assistant — per signed-in account.
+function accountIsElite(acc) {
+  try {
+    if (!acc) return false;
+    if (isGrantedAccount(acc)) return true;
+    const u = acc.email ? getUserByEmail(acc.email) : null;
+    return !!(u && (u.manual_elite || userIsElite(u.id)));
+  } catch (e) { return false; }
+}
+const applicationsDeps = { store, synth: synthesize, log, errlog, requireAccount, isElite: accountIsElite };
+require('./applications')(app, applicationsDeps);
+
 function requireAdmin(req, res) {
-  const token = req.headers['x-admin-token'] || (req.body && req.body.token) || req.query.token;
-  if (!process.env.ADMIN_TOKEN || token !== process.env.ADMIN_TOKEN) {
+  if (!adminApi.check(req)) {
     res.status(403).json({ error: 'forbidden', message: 'Admin token required' });
     return false;
   }
@@ -495,36 +530,45 @@ app.post('/api/ai/search', async (req, res) => {
   }
 });
 
-// Public (used by the AI page): the full pipeline — retrieve REAL comments from
-// Qdrant, then have OpenAI write one natural human answer grounded only in them.
-// This is "our own model": the browser never needs an Anthropic/OpenAI key.
+// Public (used by the AI page): researched answers, streamed (research.js).
+// Live Reddit threads + comments, recent news, review-site opinions and our own
+// dataset → a reasoning model weighs them and writes a cited answer. Streams
+// newline-delimited JSON: stage / sources / thinking / delta / done / error.
+const researchAI = require('./research');
+app.post('/api/ai/research', async (req, res) => {
+  const { query, history, deep } = req.body || {};
+  const q = String(query || '').trim().slice(0, 1200);
+  if (!q) return res.status(400).json({ error: 'missing_query' });
+  res.status(200);
+  res.setHeader('Content-Type', 'application/x-ndjson; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');   // no-transform → compression() leaves the stream alone
+  res.setHeader('X-Accel-Buffering', 'no');
+  if (res.flushHeaders) res.flushHeaders();
+  const ctrl = new AbortController();
+  let closed = false;
+  res.on('close', () => { closed = true; ctrl.abort(); });
+  const emit = (evt) => { if (!closed) { res.write(JSON.stringify(evt) + '\n'); if (res.flush) res.flush(); } };
+  const t0 = Date.now(), seen = { counts: {}, subject: null, error: null };
+  const track = (evt) => { if (evt.type === 'done') seen.counts = evt.counts || {}; if (evt.type === 'stage' && evt.id === 'plan' && evt.state === 'done') seen.subject = String(evt.detail || '').split(' · ').pop(); if (evt.type === 'error') seen.error = evt.message; emit(evt); };
+  try {
+    const hist = Array.isArray(history) ? history.slice(-3).map((h) => ({ q: String(h && h.q || '').slice(0, 600), a: String(h && h.a || '').slice(0, 1500) })).filter((h) => h.q) : [];
+    await researchAI.research(q, { history: hist, deep: !!deep, signal: ctrl.signal }, track);
+  } catch (e) {
+    seen.error = e.message;
+    if (!closed) { errlog('ai/research failed:', e.message); emit({ type: 'error', message: /401|invalid api key/i.test(e.message) ? 'The AI key on the server was rejected.' : 'Research failed — ' + e.message }); }
+  }
+  if (adminDeps.logAI) adminDeps.logAI({ userId: req.body && req.body.userId, query: q, subject: seen.subject, ms: Date.now() - t0, ok: !seen.error && !closed, deep: !!deep,
+    reddit: seen.counts.reddit, news: seen.counts.news, reviews: seen.counts.reviews, error: closed ? 'stopped by user' : seen.error });
+  if (!closed) res.end();
+});
+
+// Older JSON endpoint — same pipeline, answer returned in one piece.
 app.post('/api/ai/ask', async (req, res) => {
   try {
-    const { query, type } = req.body || {};
+    const { query } = req.body || {};
     if (!query || !String(query).trim()) return res.status(400).json({ error: 'missing_query' });
-    if (!qdrant.isConfigured()) {
-      return res.status(503).json({ error: 'not_configured', message: 'The opinion database is not set up yet.' });
-    }
-    // 1. Retrieve the most relevant real comments (local FastEmbed → Qdrant).
-    //    If the question names a known place, lock the search to just that entity
-    //    so we don't mix opinions from other universities/cities.
-    const detected = qdrant.detectEntity(String(query));
-    const comments = await qdrant.searchComments(String(query).trim(), {
-      entityId: detected ? detected.entityId : undefined,
-      type: detected ? detected.type : ((type === 'university' || type === 'city') ? type : undefined),
-      limit: 12,
-    });
-    // 2. Synthesise one human answer from those real comments (OpenAI, or fallback).
-    const out = await synthesize.synthesize(String(query).trim(), comments, {});
-    res.json({
-      ok: true,
-      query,
-      answer: out.answer,
-      sources: out.sources,
-      model: out.model,
-      grounded: out.grounded,
-      usedComments: comments.length,
-    });
+    const out = await researchAI.research(String(query).trim().slice(0, 1200), {});
+    res.json({ ok: true, query, answer: out.answer, sources: out.sources || [], model: 'research', grounded: (out.sources || []).length });
   } catch (e) {
     errlog('ai/ask failed:', e.message);
     res.status(500).json({ error: 'ask_failed', message: e.message });
@@ -589,6 +633,122 @@ app.post('/api/ai/essay', async (req, res) => {
     }
     errlog('ai/essay failed:', e.message);
     res.status(500).json({ error: 'essay_failed', message: e.message });
+  }
+});
+
+// ── AI university matcher: a holistic recommendation from the shortlist ──────
+// The browser sends the student's full profile + the deterministically-ranked
+// shortlist; the LLM (Groq via the shared chat() helper — no browser key needed)
+// weighs everything (grades, budget, career goals, sport/chess talents, hobbies)
+// and recommends the best-fit universities *from that list only*.
+app.post('/api/ai/match', async (req, res) => {
+  try {
+    const { profile, candidates } = req.body || {};
+    const list = (Array.isArray(candidates) ? candidates : []).filter((u) => u && u.id != null).slice(0, 20);
+    if (!list.length) return res.status(400).json({ error: 'missing_candidates', message: 'No shortlisted universities to analyse.' });
+
+    const p = profile || {};
+    const num = (n) => Number(n).toLocaleString();
+    const profLines = [
+      p.subjects && p.subjects.length ? 'Favourite subjects: ' + p.subjects.join(', ') : null,
+      (p.exp || p.avg) ? 'Expected grade: ' + (p.exp || p.avg) + '%' : null,
+      p.level ? 'Study level: ' + p.level : null,
+      p.lang ? 'Preferred teaching language: ' + p.lang : null,
+      p.budget ? 'Yearly tuition budget: up to €' + num(p.budget) : null,
+      (p.maxLiving && p.maxLiving < 2500) ? 'Max monthly living cost: €' + num(p.maxLiving) : null,
+      (p.vibe && p.vibe !== 'any') ? 'City vibe: ' + (p.vibe === 'big' ? 'big city' : 'smaller town') : null,
+      p.hobbies && p.hobbies.length ? 'Hobbies & interests: ' + p.hobbies.join(', ') : null,
+      p.sport ? ('Sport: ' + p.sport + (p.athlete ? ' (level ' + p.athlete + '/5 — may qualify for athletic support/scholarships)' : '')) : null,
+      p.priorities && p.priorities.length ? 'What matters most: ' + p.priorities.join(', ') : null,
+      p.minSalary ? 'Wants graduate salary at least €' + num(p.minSalary) : null,
+      p.minEmployer ? 'Wants employer-recruitment match at least ' + p.minEmployer + '%' : null,
+      p.rankTier ? 'Prefers a top-' + p.rankTier + ' university' : null,
+    ].filter(Boolean).join('\n');
+
+    const candText = list.map((u) =>
+      '[' + u.id + '] ' + u.name + ' — ' + [u.city, u.country].filter(Boolean).join(', ') +
+      '; tuition ' + (u.tuition || 'n/a') +
+      '; entry difficulty ' + (u.difficulty || '?') + '/5' +
+      (u.acceptance != null ? '; ~' + u.acceptance + '% acceptance' : '') +
+      (u.salary ? '; ~€' + num(u.salary) + ' median graduate salary' : '') +
+      (u.employer != null ? '; ' + u.employer + '% employer-recruitment match' : '') +
+      (u.fields && u.fields.length ? '; fields: ' + u.fields.slice(0, 6).join(', ') : '') +
+      (u.langs && u.langs.length ? '; taught in ' + u.langs.join('/') : '')
+    ).join('\n');
+
+    const limit = list.length;
+    const system =
+      'You are UniVersity AI, an expert university admissions advisor. You score and rank universities for a specific ' +
+      'student by weighing their WHOLE profile — academic subjects and grades, tuition budget and living-cost limits, ' +
+      'teaching language, career priorities (graduate salary, employer reputation, prestige), lifestyle (city vibe, ' +
+      'hobbies) and any sporting or competitive talent. Student athletes, and even strong chess/esports players, often ' +
+      'get scholarships, facilities, or a more flexible admissions path at certain universities — factor that in where ' +
+      'it genuinely applies. Consider outside factors the raw filters miss (subject strength, city fit, talent ' +
+      'pathways, career outcomes, value for money). Never invent universities or numbers. ' +
+      'Be generous and realistic rather than strict: a university that meets most of what the student wants is still a ' +
+      'good match, and one that misses a preference is a partial match, not a rejection. ' +
+      'Give EVERY candidate a "match" percentage from 0-100: 75-100 = a real match, 55-74 = might match, below 55 = a ' +
+      'stretch. Spread the scores realistically; it is normal for several to land above 75. ' +
+      'Each candidate is listed as "[id] Name — details". Reply with STRICT JSON only, no prose, in exactly this ' +
+      'shape: {"ranked":[{"id":"<the id exactly as inside the square brackets, without the brackets>",' +
+      '"match":<integer 0-100>,"reason":"<max 12 words, why it fits or does not fit THIS student>"}]} ' +
+      'Order best-first (highest match first). Include ALL ' + limit + ' candidates — never leave one out. ' +
+      'Use only ids from the candidate list.';
+
+    const userMsg =
+      'STUDENT PROFILE\n' + (profLines || '(the student gave only minimal preferences)') + '\n\n' +
+      'CANDIDATE UNIVERSITIES (rank only these, by their id)\n' + candText + '\n\n' +
+      'Return the ranked JSON now.';
+
+    const out = await synthesize.chat(system, userMsg, { maxTokens: 1800, temperature: 0.4, json: true });
+    if (!out.text) return res.status(502).json({ error: 'empty', message: 'The AI returned an empty response.' });
+
+    // Parse defensively: tolerate code fences / stray prose around the JSON.
+    let parsed = null;
+    try {
+      const raw = out.text.trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+      const s = raw.indexOf('{'), e2 = raw.lastIndexOf('}');
+      parsed = JSON.parse(s >= 0 && e2 > s ? raw.slice(s, e2 + 1) : raw);
+    } catch (_) { /* fall through */ }
+
+    // Models like to echo back decoration ("id=a", "[a]") — strip it before matching.
+    const normId = (v) => String(v == null ? '' : v).trim()
+      .replace(/^id\s*[:=]\s*/i, '')
+      .replace(/^\[|\]$/g, '')
+      .replace(/^\(|\)$/g, '')
+      .trim();
+    const known = new Set(list.map((u) => String(u.id)));
+    const seen = new Set();
+    // Accept {ranked:[...]}, a bare array, or the first array found in the object.
+    let arr = null;
+    if (Array.isArray(parsed)) arr = parsed;
+    else if (parsed && Array.isArray(parsed.ranked)) arr = parsed.ranked;
+    else if (parsed && typeof parsed === 'object') arr = Object.values(parsed).find(Array.isArray) || null;
+
+    const clampPct = (v) => {
+      const n = Math.round(Number(v));
+      return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : null;
+    };
+    const ranked = (arr || [])
+      .map((r) => ({
+        id: normId(r && r.id),
+        match: clampPct(r && r.match),
+        reason: String((r && r.reason) || '').slice(0, 90),
+      }))
+      .filter((r) => known.has(r.id) && !seen.has(r.id) && seen.add(r.id))
+      .slice(0, limit);
+
+    if (!ranked.length) {
+      errlog('ai/match unparseable reply:', JSON.stringify(String(out.text).slice(0, 600)));
+      return res.status(502).json({ error: 'parse_failed', message: 'The AI did not return a usable ranking.' });
+    }
+    res.json({ ok: true, ranked, model: out.model });
+  } catch (e) {
+    if (e && e.code === 'not_configured') {
+      return res.status(503).json({ error: 'not_configured', message: 'The AI advisor is not set up yet (no API key).' });
+    }
+    errlog('ai/match failed:', e.message);
+    res.status(500).json({ error: 'match_failed', message: e.message });
   }
 });
 
@@ -720,10 +880,65 @@ async function persistDigestPrefs(email, universities, country) {
   } catch (e) { errlog('persistDigestPrefs failed:', e.message); }
 }
 
+// ── Daily global education-news feed (news.js agent) ──────────
+// Returns today's curated top-10. Cached server-side for 24h; ?force=1 rebuilds.
+app.get('/api/news', async (req, res) => {
+  try {
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(req.query.date || '') ? req.query.date : null;
+    const data = await news.getNews({ force: req.query.force === '1', date });
+    res.json({
+      generatedAt: data.generatedAt || Date.now(),
+      date: data.date || null,
+      nextRefresh: news.nextBoundary(),
+      count: (data.items || []).length,
+      items: data.items || [],
+    });
+  } catch (e) {
+    res.status(500).json({ error: 'news_failed', items: [] });
+  }
+});
+
+// The days that have an archived brief (for the feed's date picker).
+app.get('/api/news/dates', (req, res) => {
+  try { res.json({ dates: news.availableDates() }); }
+  catch (e) { res.json({ dates: [] }); }
+});
+
+// Per-university news for the Feed sidebar (the user's CURRENT saved universities).
+// Served from feeds.js: kept on disk and refreshed in the background every few
+// hours, so opening the feed is instant and survives restarts.
+app.get('/api/uni-news', async (req, res) => {
+  try {
+    const names = String(req.query.unis || '').split(',').map(s => s.trim()).filter(Boolean);
+    const out = await feeds.forUnis(names);
+    res.json({ ok: true, news: out.news, refreshedAt: out.refreshedAt });
+  } catch (e) { res.status(500).json({ error: 'uni_news_failed', news: {} }); }
+});
+app.get('/api/feeds/status', (req, res) => {
+  try { res.json({ ok: true, ...feeds.status(), briefStale: news.isStale(), nextBrief: news.nextBoundary() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Cron trigger to force-rebuild today's news (protected by the same token as the
+// digest cron). Responds immediately, rebuilds in the background (~15-30s).
+//   GET /api/news/cron?token=DIGEST_CRON_TOKEN
+app.all('/api/news/cron', (req, res) => {
+  const want = process.env.DIGEST_CRON_TOKEN;
+  const got = (req.query && req.query.token) || req.get('x-cron-token');
+  if (!want || got !== want) return res.status(403).json({ error: 'forbidden' });
+  res.json({ ok: true, started: true });
+  news.refresh()
+    .then(d => log('news refreshed:', (d.items || []).length, 'stories'))
+    .catch(e => errlog('news refresh failed:', e.message));
+});
+
 app.post('/api/digest/subscribe', (req, res) => {
   try {
     const { email, userId, universities, country } = req.body || {};
     const out = digest.subscribe({ email, userId, universities, country });
+    // Durable live list (Neon) — survives restarts and beats Stripe/targets-file copies.
+    store.setDigestPrefs(email, (universities || []).map(function (u) { return typeof u === 'string' ? u : (u && u.name) || ''; }).filter(Boolean), country)
+      .catch(function () {});
     // Mirror into Stripe metadata (durable) — fire-and-forget, Elite users only.
     persistDigestPrefs(email, universities, country);
     store.setDigestOptOut(email, false).catch(function () {});   // opted in
@@ -772,9 +987,14 @@ app.all('/api/digest/cron', async (req, res) => {
   res.json({ ok: true, started: true, mailer: !!mailer });
   (async () => {
     try {
-      digest.seedFromTargetsFile();
-      // Recipients = every Elite buyer (from Stripe, durable) + any locally-stored
-      // subscribers / digest-targets.json entries. runDigest de-dupes by email.
+      digest.seedFromTargetsFile();   // insert-only; never overrides a synced list
+      // Recipients, de-duped by email with the FIRST source winning, most-live first:
+      //   1. Neon digest_state (what the app last synced — the real saved list)
+      //   2. local SQLite subscribers   3. Stripe metadata (fallback after a DB reset)
+      let durable = [];
+      try { durable = await store.getDigestStates(); } catch (e) {}
+      const seenByEmail = {};
+      durable.forEach(function (d) { if (d.seen) seenByEmail[String(d.email).toLowerCase()] = d.seen; });
       let elite = [];
       try { elite = await listEliteRecipients(); }
       catch (e) { errlog('listEliteRecipients failed:', e.message); }
@@ -782,9 +1002,16 @@ app.all('/api/digest/cron', async (req, res) => {
       let optouts = [];
       try { optouts = await store.getDigestOptOuts(); } catch (e) {}
       const offSet = {}; optouts.forEach(function (e) { offSet[String(e).toLowerCase()] = 1; });
-      const recipients = elite.concat(digest._all.all())
-        .filter(function (r) { return r.email && !offSet[String(r.email).toLowerCase()]; });
-      const results = await digest.runDigest(mailer, synthesize, null, recipients);
+      const recipients = durable.filter(function (d) { return d.universities; })
+        .concat(digest._all.all(), elite)
+        .filter(function (r) { return r.email && !offSet[String(r.email).toLowerCase()]; })
+        .map(function (r) {
+          const k = String(r.email).toLowerCase();
+          return Object.assign({}, r, { seen: seenByEmail[k] != null ? seenByEmail[k] : r.seen });
+        });
+      const results = await digest.runDigest(mailer, synthesize, null, recipients, {
+        onSeen: function (email, list) { store.setDigestSeen(email, list).catch(function () {}); },
+      });
       log('Cron digest: ' + results.filter(r => r.sent).length + '/' + results.length +
           ' sent (' + elite.length + ' Elite from Stripe).');
     } catch (e) { errlog('Cron digest failed:', e.message); }
@@ -792,23 +1019,29 @@ app.all('/api/digest/cron', async (req, res) => {
 });
 
 // Schedule the digest to run once a day at DIGEST_HOUR (local time, default 08:00).
+// Wall-clock schedule: a minute tick checks whether today's run is due, so a
+// Mac that slept through DIGEST_HOUR still sends once it wakes (a 24 h
+// setTimeout would drift by however long the machine slept). runDigest's own
+// per-person rate limit stops double sends after restarts.
 function scheduleDailyDigest() {
   const HOUR = parseInt(process.env.DIGEST_HOUR || '8', 10);
-  function msUntilNext() {
-    const now = new Date();
-    const t = new Date(now); t.setHours(HOUR, 0, 0, 0);
-    if (t <= now) t.setDate(t.getDate() + 1);
-    return t - now;
-  }
-  function run() {
+  const STATE = path.join(__dirname, 'data', 'digest-schedule.json');
+  const today = () => { const d = new Date(); return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate(); };
+  let last = ''; try { last = JSON.parse(fs.readFileSync(STATE, 'utf8')).last || ''; } catch (e) {}
+  let running = false;
+  function check() {
+    if (running || new Date().getHours() < HOUR || last === today()) return;
+    running = true; last = today();
+    try { fs.writeFileSync(STATE, JSON.stringify({ last })); } catch (e) {}
     try { digest.seedFromTargetsFile(); } catch (e) {}
     digest.runDigest(mailer, synthesize)
-      .then(r => log('Daily digest run:', JSON.stringify(r.map(x => ({ to: x.email, sent: !!x.sent, headlines: x.headlines })))))
-      .catch(e => errlog('Daily digest failed:', e.message));
-    setTimeout(run, 24 * 60 * 60 * 1000);
+      .then(r => log('Daily digest run:', JSON.stringify(r.map(x => ({ to: x.email, sent: !!x.sent, headlines: x.headlines, skipped: x.skipped })))))
+      .catch(e => errlog('Daily digest failed:', e.message))
+      .then(() => { running = false; });
   }
-  setTimeout(run, msUntilNext());
-  log('Daily digest scheduled for ' + HOUR + ':00 local (~' + Math.round(msUntilNext() / 3600000) + 'h away).' + (mailer ? '' : ' NOTE: no SMTP configured — emails will not send until SMTP_* is set in .env.'));
+  setTimeout(check, 15000);
+  setInterval(check, 60 * 1000);
+  log('Daily digest checks every minute for ' + HOUR + ':00 local.' + (mailer ? '' : ' NOTE: no SMTP configured — emails will not send until SMTP_* is set in .env.'));
 }
 
 // Admin: status / indexed count
@@ -870,4 +1103,5 @@ app.listen(PORT, async () => {
     log('Reminder: run `stripe listen --forward-to localhost:' + PORT + '/webhook` and put the printed whsec_ into .env');
   }
   scheduleDailyDigest();
+  feeds.start({ log, errlog });
 });

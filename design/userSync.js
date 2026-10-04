@@ -45,6 +45,37 @@
   }
   function parseMaybe(v) { try { return JSON.parse(v); } catch (e) { return v; } }
 
+  // ── Conflict resolution on hydrate ──────────────────────────────────────────
+  // Default policy is "server wins", but a few keys hold monotonic progress that
+  // must never regress when an older snapshot comes down from the server (e.g.
+  // signing out before the last write flushed). Resolvers return the string to
+  // store locally. Matched by key PREFIX so per-user keys (…_<id>) are covered.
+  var MERGE_RESOLVERS = {
+    'us_streak_': function (localStr, serverStr) {
+      var l = null, s = null;
+      try { l = JSON.parse(localStr); } catch (e) {}
+      try { s = JSON.parse(serverStr); } catch (e) {}
+      if (!l || !l.last) return serverStr;   // nothing worth keeping locally
+      if (!s || !s.last) return localStr;     // server has nothing usable
+      // Keep whichever record reflects the most recent day; on the same day keep
+      // the higher count. Always preserve the best (longest) streak ever seen.
+      var pick;
+      if (l.last > s.last)      pick = l;
+      else if (l.last < s.last) pick = s;
+      else                      pick = (l.count || 0) >= (s.count || 0) ? l : s;
+      pick.best = Math.max(l.best || 0, s.best || 0, pick.count || 0);
+      return JSON.stringify(pick);
+    }
+  };
+  function resolveMerge(key, localStr, serverStr) {
+    if (localStr != null) {
+      for (var prefix in MERGE_RESOLVERS) {
+        if (key.indexOf(prefix) === 0) return MERGE_RESOLVERS[prefix](localStr, serverStr);
+      }
+    }
+    return serverStr;   // default: server wins
+  }
+
   // ── Write-through (debounced) ──────────────────────────────────────────────
   var dirty = {}, timer = null, hydrating = false;
   function schedule() { if (!timer) timer = setTimeout(flush, 800); }
@@ -89,12 +120,25 @@
           }).catch(function () {}));
         }
         hydrating = true;
+        var reSync = [];
         try {
           Object.keys(server).forEach(function (k) {
             var val = server[k];
-            nativeSet(k, typeof val === 'string' ? val : JSON.stringify(val));
+            var incoming = typeof val === 'string' ? val : JSON.stringify(val);
+            var resolved = resolveMerge(k, nativeGet(k), incoming);
+            nativeSet(k, resolved);
+            // If our reconciled value differs from what the server sent, push the
+            // corrected value back up so the account stays consistent.
+            if (resolved !== incoming) reSync.push(k);
           });
         } finally { hydrating = false; }
+        reSync.forEach(function (k) {
+          var v = nativeGet(k);
+          if (v == null) return;
+          pushes.push(fetch(API + '/api/data/' + encodeURIComponent(k), {
+            method: 'PUT', headers: authHeaders(true), body: JSON.stringify({ value: parseMaybe(v) }),
+          }).catch(function () {}));
+        });
         return Promise.all(pushes).then(function () { return true; });
       }).catch(function () { return false; });
   }

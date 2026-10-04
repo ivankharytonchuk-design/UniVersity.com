@@ -1,3 +1,19 @@
 {
-    "liveServer.settings.port": 5501
+    "liveServer.settings.port": 5501,
+    // The backend writes its data files (news, feeds, SQLite) inside the project;
+    // Live Server must not reload the page for those — only for the site in design/.
+    "liveServer.settings.ignoreFiles": [
+        ".vscode/**",
+        "server/**",
+        "tools/**",
+        "agent/**",
+        "shots/**",
+        "design/shots/**",
+        "**/*.db",
+        "**/*.db-wal",
+        "**/*.db-shm",
+        "**/*.scss",
+        "**/*.sass",
+        "**/*.ts"
+    ]
 }

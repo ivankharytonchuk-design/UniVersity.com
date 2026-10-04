@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk 'NR>=197 && NR<=1760 && /^    <\\(div|section\\)[^>]*class=/' design/mainPage.html)",
+      "Bash(awk 'NR>=197 && NR<=520 && /^        <\\(div|section\\)[^>]*class=/' design/mainPage.html)",
+      "Bash(node -e \"require\\('./digest'\\)\")",
+      "Bash(grep -n \"^\\\\.ba__[a-z_]* {\\\\|^\\\\.ba__[a-z_:]*[ ,{]\")",
+      "Bash(node --check uiFloat.js)",
+      "Bash(RESEND_API_KEY='' OPENAI_API_KEY='' GROQ_API_KEY='' node -e ' *)",
+      "Bash(python3 -c ' *)"
+    ]
+  }
+}

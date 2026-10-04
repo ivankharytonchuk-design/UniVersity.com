@@ -1,0 +1,530 @@
+{
+"hbo-bachelor|Economie|0": [
+"2023",
+18.66
+],
+"hbo-bachelor|Economie|10y": [
+"2013",
+31.61
+],
+"hbo-bachelor|Economie|1y": [
+"2022",
+20.29
+],
+"hbo-bachelor|Economie|2y": [
+"2021",
+21.98
+],
+"hbo-bachelor|Economie|3y": [
+"2020",
+23.61
+],
+"hbo-bachelor|Economie|5y": [
+"2018",
+26.68
+],
+"hbo-bachelor|Gedrag en Maatschappij|0": [
+"2023",
+21.82
+],
+"hbo-bachelor|Gedrag en Maatschappij|10y": [
+"2013",
+30.3
+],
+"hbo-bachelor|Gedrag en Maatschappij|1y": [
+"2022",
+23.61
+],
+"hbo-bachelor|Gedrag en Maatschappij|2y": [
+"2021",
+24.69
+],
+"hbo-bachelor|Gedrag en Maatschappij|3y": [
+"2020",
+25.58
+],
+"hbo-bachelor|Gedrag en Maatschappij|5y": [
+"2018",
+27.22
+],
+"hbo-bachelor|Gezondheidszorg|0": [
+"2023",
+23.91
+],
+"hbo-bachelor|Gezondheidszorg|10y": [
+"2013",
+32.88
+],
+"hbo-bachelor|Gezondheidszorg|1y": [
+"2022",
+25.93
+],
+"hbo-bachelor|Gezondheidszorg|2y": [
+"2021",
+27.29
+],
+"hbo-bachelor|Gezondheidszorg|3y": [
+"2020",
+28.46
+],
+"hbo-bachelor|Gezondheidszorg|5y": [
+"2018",
+30.43
+],
+"hbo-bachelor|Taal en cultuur|0": [
+"2023",
+16.89
+],
+"hbo-bachelor|Taal en cultuur|10y": [
+"2013",
+25.76
+],
+"hbo-bachelor|Taal en cultuur|1y": [
+"2022",
+17.37
+],
+"hbo-bachelor|Taal en cultuur|2y": [
+"2021",
+18.59
+],
+"hbo-bachelor|Taal en cultuur|3y": [
+"2020",
+19.45
+],
+"hbo-bachelor|Taal en cultuur|5y": [
+"2018",
+21.52
+],
+"hbo-bachelor|Techniek|0": [
+"2023",
+20.11
+],
+"hbo-bachelor|Techniek|10y": [
+"2013",
+33.29
+],
+"hbo-bachelor|Techniek|1y": [
+"2022",
+21.77
+],
+"hbo-bachelor|Techniek|2y": [
+"2021",
+23.49
+],
+"hbo-bachelor|Techniek|3y": [
+"2020",
+24.95
+],
+"hbo-bachelor|Techniek|5y": [
+"2018",
+27.8
+],
+"hbo-bachelor|Totaal|0": [
+"2023",
+20.43
+],
+"hbo-bachelor|Totaal|10y": [
+"2013",
+32.32
+],
+"hbo-bachelor|Totaal|1y": [
+"2022",
+22.2
+],
+"hbo-bachelor|Totaal|2y": [
+"2021",
+23.85
+],
+"hbo-bachelor|Totaal|3y": [
+"2020",
+25.16
+],
+"hbo-bachelor|Totaal|5y": [
+"2018",
+27.63
+],
+"wo-bachelor|Economie|0": [
+"2023",
+18.54
+],
+"wo-bachelor|Economie|10y": [
+"2013",
+42.05
+],
+"wo-bachelor|Economie|1y": [
+"2022",
+21.57
+],
+"wo-bachelor|Economie|2y": [
+"2021",
+23.7
+],
+"wo-bachelor|Economie|3y": [
+"2020",
+26.32
+],
+"wo-bachelor|Economie|5y": [
+"2018",
+30.74
+],
+"wo-bachelor|Gedrag en Maatschappij|0": [
+"2023",
+18.16
+],
+"wo-bachelor|Gedrag en Maatschappij|10y": [
+"2013",
+34.92
+],
+"wo-bachelor|Gedrag en Maatschappij|1y": [
+"2022",
+21.35
+],
+"wo-bachelor|Gedrag en Maatschappij|2y": [
+"2021",
+23.88
+],
+"wo-bachelor|Gedrag en Maatschappij|3y": [
+"2020",
+25.09
+],
+"wo-bachelor|Gedrag en Maatschappij|5y": [
+"2018",
+28.45
+],
+"wo-bachelor|Gezondheidszorg|0": [
+"2023",
+19.27
+],
+"wo-bachelor|Gezondheidszorg|10y": [
+"2013",
+37.95
+],
+"wo-bachelor|Gezondheidszorg|1y": [
+"2022",
+24.83
+],
+"wo-bachelor|Gezondheidszorg|2y": [
+"2021",
+26.47
+],
+"wo-bachelor|Gezondheidszorg|3y": [
+"2020",
+30.14
+],
+"wo-bachelor|Gezondheidszorg|5y": [
+"2018",
+32.84
+],
+"wo-bachelor|Natuur|0": [
+"2023",
+18.81
+],
+"wo-bachelor|Natuur|10y": [
+"2013",
+36.95
+],
+"wo-bachelor|Natuur|1y": [
+"2022",
+22.47
+],
+"wo-bachelor|Natuur|2y": [
+"2021",
+24.79
+],
+"wo-bachelor|Natuur|3y": [
+"2020",
+26.73
+],
+"wo-bachelor|Natuur|5y": [
+"2018",
+29.61
+],
+"wo-bachelor|Recht|0": [
+"2023",
+18.91
+],
+"wo-bachelor|Recht|10y": [
+"2013",
+38.25
+],
+"wo-bachelor|Recht|1y": [
+"2022",
+24.51
+],
+"wo-bachelor|Recht|2y": [
+"2021",
+26.47
+],
+"wo-bachelor|Recht|3y": [
+"2020",
+27.94
+],
+"wo-bachelor|Recht|5y": [
+"2018",
+32.57
+],
+"wo-bachelor|Taal en cultuur|0": [
+"2023",
+17.59
+],
+"wo-bachelor|Taal en cultuur|10y": [
+"2013",
+32.01
+],
+"wo-bachelor|Taal en cultuur|1y": [
+"2022",
+19.59
+],
+"wo-bachelor|Taal en cultuur|2y": [
+"2021",
+21.86
+],
+"wo-bachelor|Taal en cultuur|3y": [
+"2020",
+23.58
+],
+"wo-bachelor|Taal en cultuur|5y": [
+"2018",
+25.64
+],
+"wo-bachelor|Techniek|0": [
+"2023",
+20.95
+],
+"wo-bachelor|Techniek|10y": [
+"2013",
+39.53
+],
+"wo-bachelor|Techniek|1y": [
+"2022",
+23.51
+],
+"wo-bachelor|Techniek|2y": [
+"2021",
+25.53
+],
+"wo-bachelor|Techniek|3y": [
+"2020",
+27
+],
+"wo-bachelor|Techniek|5y": [
+"2018",
+30.3
+],
+"wo-bachelor|Totaal|0": [
+"2023",
+18.54
+],
+"wo-bachelor|Totaal|10y": [
+"2013",
+36.06
+],
+"wo-bachelor|Totaal|1y": [
+"2022",
+21.94
+],
+"wo-bachelor|Totaal|2y": [
+"2021",
+24.18
+],
+"wo-bachelor|Totaal|3y": [
+"2020",
+26.09
+],
+"wo-bachelor|Totaal|5y": [
+"2018",
+29.41
+],
+"wo-master|Economie|0": [
+"2023",
+21.26
+],
+"wo-master|Economie|10y": [
+"2013",
+44.31
+],
+"wo-master|Economie|1y": [
+"2022",
+23.61
+],
+"wo-master|Economie|2y": [
+"2021",
+26.16
+],
+"wo-master|Economie|3y": [
+"2020",
+28.85
+],
+"wo-master|Economie|5y": [
+"2018",
+34.01
+],
+"wo-master|Gedrag en Maatschappij|0": [
+"2023",
+22.36
+],
+"wo-master|Gedrag en Maatschappij|10y": [
+"2013",
+39
+],
+"wo-master|Gedrag en Maatschappij|1y": [
+"2022",
+25.19
+],
+"wo-master|Gedrag en Maatschappij|2y": [
+"2021",
+27.22
+],
+"wo-master|Gedrag en Maatschappij|3y": [
+"2020",
+29.72
+],
+"wo-master|Gedrag en Maatschappij|5y": [
+"2018",
+32.86
+],
+"wo-master|Gezondheidszorg|0": [
+"2023",
+21.85
+],
+"wo-master|Gezondheidszorg|10y": [
+"2013",
+38.71
+],
+"wo-master|Gezondheidszorg|1y": [
+"2022",
+24.78
+],
+"wo-master|Gezondheidszorg|2y": [
+"2021",
+26.47
+],
+"wo-master|Gezondheidszorg|3y": [
+"2020",
+28.28
+],
+"wo-master|Gezondheidszorg|5y": [
+"2018",
+31.85
+],
+"wo-master|Natuur|0": [
+"2023",
+21.47
+],
+"wo-master|Natuur|10y": [
+"2013",
+39.06
+],
+"wo-master|Natuur|1y": [
+"2022",
+23.67
+],
+"wo-master|Natuur|2y": [
+"2021",
+25.75
+],
+"wo-master|Natuur|3y": [
+"2020",
+27.7
+],
+"wo-master|Natuur|5y": [
+"2018",
+32.21
+],
+"wo-master|Recht|0": [
+"2023",
+22.85
+],
+"wo-master|Recht|10y": [
+"2013",
+42.86
+],
+"wo-master|Recht|1y": [
+"2022",
+25.58
+],
+"wo-master|Recht|2y": [
+"2021",
+27.79
+],
+"wo-master|Recht|3y": [
+"2020",
+30.77
+],
+"wo-master|Recht|5y": [
+"2018",
+35.31
+],
+"wo-master|Taal en cultuur|0": [
+"2023",
+19.21
+],
+"wo-master|Taal en cultuur|10y": [
+"2013",
+34.59
+],
+"wo-master|Taal en cultuur|1y": [
+"2022",
+21.94
+],
+"wo-master|Taal en cultuur|2y": [
+"2021",
+24.6
+],
+"wo-master|Taal en cultuur|3y": [
+"2020",
+25.87
+],
+"wo-master|Taal en cultuur|5y": [
+"2018",
+29.51
+],
+"wo-master|Techniek|0": [
+"2023",
+22.46
+],
+"wo-master|Techniek|10y": [
+"2013",
+41.7
+],
+"wo-master|Techniek|1y": [
+"2022",
+24.3
+],
+"wo-master|Techniek|2y": [
+"2021",
+26.54
+],
+"wo-master|Techniek|3y": [
+"2020",
+28.57
+],
+"wo-master|Techniek|5y": [
+"2018",
+32.9
+],
+"wo-master|Totaal|0": [
+"2023",
+21.68
+],
+"wo-master|Totaal|10y": [
+"2013",
+40.28
+],
+"wo-master|Totaal|1y": [
+"2022",
+24.15
+],
+"wo-master|Totaal|2y": [
+"2021",
+26.4
+],
+"wo-master|Totaal|3y": [
+"2020",
+28.65
+],
+"wo-master|Totaal|5y": [
+"2018",
+32.92
+]
+}

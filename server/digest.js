@@ -28,6 +28,8 @@ db.exec(`
   );
 `);
 try { db.exec('ALTER TABLE digest_subs ADD COLUMN country TEXT'); } catch (e) { /* already there */ }
+// Keys (normalised headlines) of news already emailed — so we only send what's NEW.
+try { db.exec('ALTER TABLE digest_subs ADD COLUMN seen TEXT'); } catch (e) { /* already there */ }
 
 const _upsert = db.prepare(`
   INSERT INTO digest_subs (email, user_id, universities, country)
@@ -43,12 +45,30 @@ const _markSentUpsert = db.prepare(`
   INSERT INTO digest_subs (email, last_sent) VALUES (?, datetime('now'))
   ON CONFLICT(email) DO UPDATE SET last_sent = datetime('now')
 `);
-const _delete = db.prepare(`DELETE FROM digest_subs WHERE email = ?`);
+// Turning the digest off empties the watch list but KEEPS the row, so the last-sent stamp and the
+// list of headlines already emailed survive an off/on (deleting it let the same news be re-sent).
+const _off = db.prepare(`UPDATE digest_subs SET universities = '[]' WHERE email = ?`);
+// Seed-only insert: never overwrites a list the user has synced from the app.
+const _insertIfMissing = db.prepare(`
+  INSERT OR IGNORE INTO digest_subs (email, user_id, universities, country)
+  VALUES (@email, @user_id, @universities, @country)
+`);
+const _setSeen = db.prepare(`
+  INSERT INTO digest_subs (email, seen) VALUES (?, ?)
+  ON CONFLICT(email) DO UPDATE SET seen = excluded.seen
+`);
+const SEEN_CAP = 400;
+function newsKey(it) { return String((it && it.title) || '').toLowerCase().replace(/\s+-\s+[^-]+$/, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
+function parseList(v) {
+  if (Array.isArray(v)) return v;
+  try { const a = JSON.parse(v || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; }
+}
 
 // Minimum days between digests for a given recipient. The runners may fire daily
 // (in-process timer) or weekly (cron) and from several sources; this gate is what
 // actually guarantees "at most once a week" per person. Override via env.
-const MIN_DIGEST_DAYS = parseFloat(process.env.DIGEST_MIN_DAYS || '6.5');
+// Checks run every 2 days; 1.5 leaves slack for cron jitter.
+const MIN_DIGEST_DAYS = parseFloat(process.env.DIGEST_MIN_DAYS || '1.5');
 function sentRecently(email) {
   try {
     const row = _one.get(String(email || '').toLowerCase());
@@ -62,18 +82,18 @@ function sentRecently(email) {
 
 function unsubscribe(email) {
   email = String(email || '').trim().toLowerCase();
-  _delete.run(email);
+  _off.run(email);
   return { email, unsubscribed: true };
 }
 
 /* Save / update a subscriber: their saved universities + destination country. */
-function subscribe({ email, userId, universities, country }) {
+function subscribe({ email, userId, universities, country }, { onlyIfMissing } = {}) {
   email = String(email || '').trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('invalid_email');
   const names = (Array.isArray(universities) ? universities : [])
     .map(u => (typeof u === 'string' ? u : (u && u.name) || ''))
     .map(s => String(s).trim()).filter(Boolean);
-  _upsert.run({
+  (onlyIfMissing ? _insertIfMissing : _upsert).run({
     email, user_id: String(userId || ''),
     universities: JSON.stringify([...new Set(names)]),
     country: country ? String(country) : null,
@@ -128,7 +148,7 @@ function llmConfig() {
   const isGroq = key.indexOf('gsk_') === 0 || !!process.env.GROQ_API_KEY;
   return {
     key, baseURL: isGroq ? 'https://api.groq.com/openai/v1' : (process.env.OPENAI_BASE_URL || undefined),
-    model: process.env.OPENAI_MODEL || (isGroq ? 'llama-3.3-70b-versatile' : 'gpt-4o-mini'),
+    model: process.env.OPENAI_MODEL || (isGroq ? 'openai/gpt-oss-120b' : 'gpt-4o-mini'),
   };
 }
 function hasLLM() { return !!llmConfig(); }
@@ -141,6 +161,7 @@ async function llmChat(messages, opts = {}) {
     temperature: opts.temperature != null ? opts.temperature : 0.4,
     max_tokens: opts.max_tokens || 700,
     response_format: opts.json ? { type: 'json_object' } : undefined,
+    reasoning_effort: /gpt-oss/.test(cfg.model) ? 'low' : undefined,   // gpt-oss thinks first; keep it brief
     messages,
   });
   return (c.choices && c.choices[0] && c.choices[0].message && c.choices[0].message.content) || '';
@@ -274,41 +295,60 @@ function buildHtml({ intro, uniBlocks, countryBlock, nudge }) {
     '</div></div>';
 }
 
-/* Build + send the brief for one subscriber. */
-async function sendOne(mailer, synth, sub) {
-  let names = [];
-  try { names = JSON.parse(sub.universities || '[]'); } catch (e) {}
-  const country = sub.country || null;
-  // Elite buyers who haven't picked favourites yet still get a useful email — the
-  // destination country/city news plus a nudge to personalise it. Only skip if we
-  // have nothing at all to show them (no favourites AND no destination country).
-  const nudge = !names.length;
-  if (nudge && !country) return { email: sub.email, skipped: 'no_unis_no_country' };
+/* Persist the headlines this subscriber has now been checked against (local +
+   optional durable hook), capped so the list can't grow forever. */
+function rememberSeen(email, seen, keys, onSeen) {
+  keys.forEach(k => { if (k) { seen.delete(k); seen.add(k); } });
+  const list = Array.from(seen).slice(-SEEN_CAP);
+  try { _setSeen.run(String(email).toLowerCase(), JSON.stringify(list)); } catch (e) {}
+  if (typeof onSeen === 'function') { try { onSeen(email, list); } catch (e) {} }
+}
 
-  const uniBlocks = []; let quiet = 0; let total = 0;
+/* Build + send the brief for ONE subscriber — only if their saved universities
+   have news we haven't emailed before. */
+async function sendOne(mailer, synth, sub, opts = {}) {
+  const names = parseList(sub.universities).map(String).filter(Boolean);
+  const country = sub.country || null;
+  // The agent watches the user's CURRENT saved universities. Nothing saved →
+  // nothing to watch → no email.
+  if (!names.length) return { email: sub.email, sent: false, skipped: 'no_saved_unis' };
+
+  // What we've already emailed this person (durable copy wins over local SQLite).
+  const seen = new Set(parseList(sub.seen != null ? sub.seen : (_one.get(String(sub.email).toLowerCase()) || {}).seen));
+  const isNew = r => { const k = newsKey(r); return k && !seen.has(k); };
+
+  // Only research items we haven't sent before; a university with nothing new is left out.
+  const uniBlocks = []; let total = 0; const sentKeys = [];
   for (const name of names.slice(0, 10)) {
-    const raw = await fetchNews('"' + name + '"', 12, 30);
+    const raw = (await fetchNews('"' + name + '"', 12, 14)).filter(isNew);
+    if (!raw.length) continue;
     const items = await curate({ kind: 'university', name }, raw, 4);
+    raw.forEach(r => sentKeys.push(newsKey(r)));   // judged once — don't re-research next time
+    if (!items.length) continue;
     total += items.length;
     uniBlocks.push({ name, items });
-    if (!items.length) quiet++;
   }
 
-  // Always include news from the destination country & its cities — it's frequent
-  // and relevant (e.g. a UK destination gets UK university + city news), not just a
-  // fallback for when a university was quiet.
+  // No changes at any saved university → do nothing (but remember what we checked).
+  if (!total) {
+    if (!opts.dryRun) rememberSeen(sub.email, seen, sentKeys, opts.onSeen);
+    return { email: sub.email, sent: false, skipped: 'no_changes' };
+  }
+
+  // Updates exist — add a few fresh items from the destination country as context.
   let countryBlock = null;
   if (country) {
-    const raw = await fetchCountryNews(country);
-    const items = await curate({ kind: 'country', name: countryName(country) }, raw, 5);
-    if (items.length) { countryBlock = { country: countryName(country), items }; total += items.length; }
+    const raw = (await fetchCountryNews(country)).filter(isNew);
+    const items = await curate({ kind: 'country', name: countryName(country) }, raw, 3);
+    raw.forEach(r => sentKeys.push(newsKey(r)));
+    if (items.length) countryBlock = { country: countryName(country), items };
   }
 
-  const intro = await introLine(total, names.length, !!countryBlock);
-  const html = buildHtml({ intro, uniBlocks, countryBlock, nudge });
-  const subject = total
-    ? 'Your student brief — ' + total + ' update' + (total === 1 ? '' : 's')
-    : 'Your student brief — quiet week';
+  const intro = await introLine(total, uniBlocks.length, !!countryBlock);
+  const html = buildHtml({ intro, uniBlocks, countryBlock, nudge: false });
+  const subject = 'New at ' + uniBlocks.map(b => b.name).slice(0, 2).join(' & ') +
+    (uniBlocks.length > 2 ? ' +' + (uniBlocks.length - 2) + ' more' : '') +
+    ' — ' + total + ' update' + (total === 1 ? '' : 's');
 
   // Preferred: Resend HTTP API (no SMTP / app-passwords / IP blocks).
   if (process.env.RESEND_API_KEY) {
@@ -320,6 +360,7 @@ async function sendOne(mailer, synth, sub) {
     });
     if (!r.ok) { const t = await r.text(); throw new Error('Resend ' + r.status + ': ' + t.slice(0, 200)); }
     _markSentUpsert.run(String(sub.email).toLowerCase());
+    rememberSeen(sub.email, seen, sentKeys, opts.onSeen);
     return { email: sub.email, sent: true, headlines: total, via: 'resend' };
   }
 
@@ -329,13 +370,14 @@ async function sendOne(mailer, synth, sub) {
     to: sub.email, subject, html,
   });
   _markSentUpsert.run(String(sub.email).toLowerCase());
+  rememberSeen(sub.email, seen, sentKeys, opts.onSeen);
   return { email: sub.email, sent: true, headlines: total, via: 'smtp' };
 }
 
 /* Run the brief. With `subsOverride` (an explicit [{email,universities,country}]
    list, e.g. built from Stripe) it emails those; otherwise every stored subscriber
    (or just one, for testing). De-duplicated by email. */
-async function runDigest(mailer, synth, onlyEmail, subsOverride) {
+async function runDigest(mailer, synth, onlyEmail, subsOverride, opts = {}) {
   let subs;
   if (onlyEmail) subs = [_one.get(String(onlyEmail).toLowerCase())].filter(Boolean);
   else if (Array.isArray(subsOverride)) subs = subsOverride;
@@ -355,7 +397,7 @@ async function runDigest(mailer, synth, onlyEmail, subsOverride) {
       results.push({ email: sub.email, sent: false, skipped: 'rate_limited' });
       continue;
     }
-    try { results.push(await sendOne(mailer, synth, sub)); }
+    try { results.push(await sendOne(mailer, synth, sub, opts)); }
     catch (e) { results.push({ email: sub.email, error: e.message }); }
   }
   return results;
@@ -370,7 +412,8 @@ function seedFromTargetsFile() {
     const t = JSON.parse(fs.readFileSync(p, 'utf8'));
     const list = Array.isArray(t) ? t : [t];
     let n = 0;
-    list.forEach(s => { if (s && s.email) { try { subscribe(s); n++; } catch (e) {} } });
+    // Insert-only: the app's live synced list must always win over this static file.
+    list.forEach(s => { if (s && s.email) { try { subscribe(s, { onlyIfMissing: true }); n++; } catch (e) {} } });
     return n;
   } catch (e) { return 0; }
 }

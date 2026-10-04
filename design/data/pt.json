@@ -693,7 +693,7 @@
       "fields": [
         "Engineering",
         "Business",
-        "Health",
+        "Health Sciences",
         "Arts",
         "CS"
       ],
@@ -747,7 +747,7 @@
       "fields": [
         "Engineering",
         "Business",
-        "Health",
+        "Health Sciences",
         "Education",
         "Agriculture"
       ],
@@ -801,7 +801,7 @@
         "Engineering",
         "Business",
         "Tourism",
-        "Health",
+        "Health Sciences",
         "Arts"
       ],
       "langs": [
@@ -827,7 +827,7 @@
         "Engineering",
         "Business",
         "CS",
-        "Health",
+        "Health Sciences",
         "Arts"
       ],
       "langs": [
@@ -855,7 +855,7 @@
         "Engineering",
         "Business",
         "Education",
-        "Health"
+        "Health Sciences"
       ],
       "langs": [
         "Portuguese"
@@ -880,7 +880,7 @@
         "Engineering",
         "Business",
         "Education",
-        "Health",
+        "Health Sciences",
         "Arts"
       ],
       "langs": [
@@ -932,7 +932,7 @@
       "fields": [
         "Engineering",
         "Business",
-        "Health",
+        "Health Sciences",
         "Education",
         "Tourism"
       ],
@@ -960,7 +960,7 @@
         "Engineering",
         "Business",
         "Education",
-        "Health",
+        "Health Sciences",
         "CS"
       ],
       "langs": [
@@ -1089,7 +1089,7 @@
         "Sports",
         "Science",
         "Education",
-        "Health"
+        "Health Sciences"
       ],
       "langs": [
         "Portuguese",
@@ -1114,7 +1114,7 @@
       "fields": [
         "Engineering",
         "Business",
-        "Health",
+        "Health Sciences",
         "CS"
       ],
       "langs": [
@@ -1138,7 +1138,7 @@
       "diff": 2,
       "dl": "Low",
       "fields": [
-        "Health",
+        "Health Sciences",
         "Education",
         "Social Science",
         "Engineering"
@@ -1164,7 +1164,7 @@
       "dl": "Competitive",
       "fields": [
         "Medicine",
-        "Health",
+        "Health Sciences",
         "Science"
       ],
       "langs": [
@@ -1241,7 +1241,7 @@
         "Agriculture",
         "Business",
         "Education",
-        "Health",
+        "Health Sciences",
         "Sports"
       ],
       "langs": [

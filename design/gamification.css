@@ -56,8 +56,8 @@
 .gmf__badge__nm { font-size: 10px; font-weight: 700; color: var(--text2, #5c4a28); line-height: 1.2; }
 [data-theme="dark"] .gmf__badge__nm { color: #cabfa9; }
 
-/* Action buttons (replace the badges): Snapshot + Career paths */
-.gmf__actions { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+/* Actions: saved-scholarships container (scholarships.css) + Career paths */
+.gmf__actions { display: grid; grid-template-columns: minmax(0, 2.3fr) minmax(0, 1fr); gap: 12px; align-items: stretch; }
 @media (max-width: 560px) { .gmf__actions { grid-template-columns: 1fr; } }
 .gmf__act { --c: #d97c14; display: flex; align-items: center; gap: 13px; text-align: left; cursor: pointer; padding: 16px; border-radius: 16px;
     background: var(--white, #fff); border: 1px solid var(--border, #f0d9b5); font-family: inherit; box-shadow: 0 10px 26px -20px rgba(20,24,40,.5);
@@ -72,3 +72,16 @@
 .gmf__act__tx small { font-size: 11px; color: var(--text3, #9e7d45); margin-top: 2px; }
 .gmf__act__go { flex: 0 0 auto; color: var(--text3, #9e7d45); font-size: 13px; opacity: .5; transition: transform .2s, opacity .2s, color .2s; }
 .gmf__act:hover .gmf__act__go { opacity: 1; transform: translateX(3px); color: var(--c); }
+
+/* Career paths — glassy, floating icon, purple glow (matches the Scholarships box) */
+.gmf__act--career { position: relative; overflow: hidden; isolation: isolate;
+    background: linear-gradient(150deg, rgba(255,255,255,.96), rgba(245,240,255,.9));
+    border-color: rgba(108,63,176,.2);
+    box-shadow: 0 1px 0 rgba(255,255,255,.9) inset, 0 18px 36px -22px rgba(108,63,176,.6), 0 4px 10px -6px rgba(40,20,80,.12); }
+.gmf__act--career::before { content: ''; position: absolute; z-index: -1; width: 200px; height: 200px; right: -80px; top: -110px; border-radius: 50%; background: radial-gradient(closest-side, rgba(139,92,246,.3), transparent); filter: blur(10px); animation: gmfActBlob 10s ease-in-out infinite; pointer-events: none; }
+@keyframes gmfActBlob { 0%, 100% { translate: 0 0; } 50% { translate: -26px 16px; } }
+.gmf__act--career .gmf__act__ic { background: linear-gradient(135deg, #a78bfa, #5b21b6); box-shadow: 0 10px 22px -8px rgba(108,63,176,.9), inset 0 1px 0 rgba(255,255,255,.35); animation: gmfActBob 4.5s ease-in-out infinite -.8s; transition: transform .4s cubic-bezier(.34,1.56,.64,1); }
+@keyframes gmfActBob { 0%, 100% { translate: 0 0; } 50% { translate: 0 -3px; } }
+.gmf__act--career:hover .gmf__act__ic { transform: rotate(-8deg) scale(1.08); }
+[data-theme="dark"] .gmf__act--career { background: linear-gradient(150deg, rgba(139,92,246,.1), rgba(255,255,255,.02)); border-color: rgba(255,255,255,.09); }
+@media (prefers-reduced-motion: reduce) { .gmf__act--career::before, .gmf__act--career .gmf__act__ic { animation: none; } }

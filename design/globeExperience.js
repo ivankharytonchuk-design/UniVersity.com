@@ -15,6 +15,7 @@ import { COORDS, regionInfo } from './globeData.js?v=2';
 
 const TEX = 'https://cdn.jsdelivr.net/gh/mrdoob/three.js@r160/examples/textures/planets/';
 const REDUCED = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const DATA_COUNTRIES = ['be', 'ch', 'de', 'dk', 'es', 'fi', 'fr', 'gb', 'ie', 'it', 'nl', 'pt', 'se', 'ua', 'us'];
 
 const host = {
     countries: () => (window.ALL_COUNTRIES || []),
@@ -168,12 +169,38 @@ class EarthGlobe {
 
         this.pinGroup = new THREE.Group();
         this.scene.add(this.pinGroup);
+
+        // A faint latitude / longitude grid — the "minimal" look.
+        const pts = [];
+        const R = 1.003;
+        for (let lat = -60; lat <= 60; lat += 30) {
+            for (let lng = -180; lng < 180; lng += 4) pts.push(latLngToVec3(lat, lng, R), latLngToVec3(lat, lng + 4, R));
+        }
+        for (let lng = -180; lng < 180; lng += 30) {
+            for (let lat = -84; lat < 84; lat += 4) pts.push(latLngToVec3(lat, lng, R), latLngToVec3(lat + 4, lng, R));
+        }
+        this.grid = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(pts),
+            new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: this.theme === 'dark' ? 0.14 : 0.22, depthWrite: false }));
+        this.scene.add(this.grid);
+
+        // Glowing dots where UniVersity has full university data.
+        this.markers = new THREE.Group();
+        DATA_COUNTRIES.forEach((code) => {
+            const co = COORDS[code]; if (!co) return;
+            const m = new THREE.Mesh(new THREE.SphereGeometry(0.014, 12, 12), new THREE.MeshBasicMaterial({ color: 0xffd84d }));
+            m.position.copy(latLngToVec3(co.lat, co.lng, 1.01));
+            const halo = new THREE.Mesh(new THREE.RingGeometry(0.018, 0.026, 24), new THREE.MeshBasicMaterial({ color: 0xffd84d, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+            halo.position.copy(latLngToVec3(co.lat, co.lng, 1.004)); halo.lookAt(0, 0, 0);
+            halo.userData.phase = Math.random();
+            this.markers.add(m, halo);
+        });
+        this.scene.add(this.markers);
     }
 
     _buildAtmosphere() {
         const mat = new THREE.ShaderMaterial({
             transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending,
-            uniforms: { glow: { value: new THREE.Color(0x4a90ff) } },
+            uniforms: { glow: { value: new THREE.Color(0x6f8cff) } },
             vertexShader: `varying float vI; void main(){ vec3 n=normalize(normalMatrix*normal); vec3 v=normalize((modelViewMatrix*vec4(position,1.0)).xyz); vI=pow(0.72-dot(n,v),3.0); gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }`,
             fragmentShader: `uniform vec3 glow; varying float vI; void main(){ gl_FragColor=vec4(glow,1.0)*clamp(vI,0.0,1.0); }`
         });
@@ -230,11 +257,11 @@ class EarthGlobe {
         const grp = new THREE.Group();
         grp.position.copy(pos);
         grp.lookAt(0, 0, 0);
-        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.06, 8), new THREE.MeshBasicMaterial({ color: 0xff7a18 }));
+        const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.0035, 0.0035, 0.06, 8), new THREE.MeshBasicMaterial({ color: 0xff5a36 }));
         stem.rotation.x = Math.PI / 2; stem.position.z = 0.03; grp.add(stem);
-        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.02, 16, 16), new THREE.MeshBasicMaterial({ color: 0xff7a18 }));
+        const dot = new THREE.Mesh(new THREE.SphereGeometry(0.02, 16, 16), new THREE.MeshBasicMaterial({ color: 0xff5a36 }));
         dot.position.z = 0.065; grp.add(dot);
-        const ring = new THREE.Mesh(new THREE.RingGeometry(0.022, 0.038, 32), new THREE.MeshBasicMaterial({ color: 0xff7a18, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.022, 0.038, 32), new THREE.MeshBasicMaterial({ color: 0xff5a36, transparent: true, opacity: 0.8, side: THREE.DoubleSide }));
         ring.position.z = 0.002; grp.add(ring);
         grp.userData = { ring, born: performance.now(), pos };
         this.pinGroup.add(grp);
@@ -262,7 +289,7 @@ class EarthGlobe {
         this.camera.lookAt(0, 0, 0);
         this.controls.update();
     }
-    setTheme(theme) { this.theme = theme; if (this.nightLights) this.nightLights.material.opacity = (theme === 'dark' ? 0.6 : 0); }
+    setTheme(theme) { this.theme = theme; if (this.nightLights) this.nightLights.material.opacity = (theme === 'dark' ? 0.6 : 0); if (this.grid) this.grid.material.opacity = theme === 'dark' ? 0.14 : 0.22; }
 
     resize() {
         const w = this.canvas.clientWidth, h = this.canvas.clientHeight;
@@ -276,6 +303,11 @@ class EarthGlobe {
         const tick = (now) => {
             this.raf = requestAnimationFrame(tick);
             if (this.flight) this.flight(now);
+            if (this.markers && !REDUCED) this.markers.children.forEach((h) => {
+                if (h.userData.phase === undefined) return;
+                const k = ((now / 2400) + h.userData.phase) % 1;
+                h.scale.setScalar(1 + k * 1.6); h.material.opacity = 0.55 * (1 - k);
+            });
             if (this.pin) {
                 const age = ((now - this.pin.userData.born) % 1600) / 1600;
                 const r = this.pin.userData.ring;
@@ -309,7 +341,7 @@ class RegionSelectionModal {
     constructor() {
         this.selected = null;
         this.suggestIndex = -1;
-        this.theme = (localStorage.getItem('gm_theme') === 'dark') ? 'dark' : 'light';
+        this.theme = (localStorage.getItem('gm_theme') === 'light') ? 'light' : 'dark';
         this._build();
     }
 
@@ -333,65 +365,54 @@ class RegionSelectionModal {
     }
 
     _html() {
-        const quick = ['us', 'gb', 'es', 'de', 'au', 'nl', 'ca', 'jp'];
+        const quick = ['gb', 'us', 'de', 'nl', 'es', 'ch', 'fr', 'it'];
         const chips = quick.map((c) => `<button class="gm__chip" data-code="${c}"><span class="fi fi-${c}"></span>${host.nameOf(c)}</button>`).join('');
         return `
         <div class="gm__shell">
-          <div class="gm__topbtns">
-            <button class="gm__iconbtn gm__theme" id="gmTheme" aria-label="Toggle light or dark theme" title="Toggle theme"><i class="fa-solid ${this.theme === 'dark' ? 'fa-sun' : 'fa-moon'}"></i></button>
-            <button class="gm__iconbtn gm__close" id="gmClose" aria-label="Close">&times;</button>
-          </div>
           <div class="gm__stage">
-            <div class="gm__stars"></div>
-            <canvas class="gm__canvas" aria-label="Interactive 3D globe. Drag to rotate, scroll to zoom, click a region to select it."></canvas>
+            <div class="gm__stars" aria-hidden="true"></div>
+            <div class="gm__halo" aria-hidden="true"><i></i><i></i></div>
+            <canvas class="gm__canvas" aria-label="Interactive 3D globe. Drag to rotate, scroll to zoom, click a country to select it."></canvas>
             <div class="gm__pin__label" id="gmPinLabel"></div>
-            <div class="gm__stage__head">
-              <span class="gm__eyebrow"><i class="fa-solid fa-earth-americas"></i> UniVersity · Global</span>
-              <h2 class="gm__title">Find universities <em>anywhere on Earth</em></h2>
-              <p class="gm__subtitle">Spin the globe or search a country, city or region to begin your journey.</p>
-            </div>
-            <div class="gm__globe__controls">
-              <button class="gm__gc__btn" id="gmZoomIn" aria-label="Zoom in"><i class="fa-solid fa-plus"></i></button>
-              <button class="gm__gc__btn" id="gmZoomOut" aria-label="Zoom out"><i class="fa-solid fa-minus"></i></button>
-              <button class="gm__gc__btn" id="gmReset" aria-label="Reset view"><i class="fa-solid fa-arrows-rotate"></i></button>
-            </div>
-            <div class="gm__gc__hint"><i class="fa-solid fa-hand-pointer"></i> Drag to rotate · scroll to zoom · click to pick</div>
             <div class="gm__stage__loading" id="gmLoading"><div class="gm__spinner"></div></div>
-            <div class="gm__fallback"><div><i class="fa-solid fa-earth-americas"></i><p id="gmFallbackMsg">Your browser couldn’t start the 3D globe.<br>Use the search on the right to pick a destination.</p></div></div>
+            <div class="gm__fallback"><div><i class="fa-solid fa-earth-europe"></i><p id="gmFallbackMsg">Your browser couldn’t start the 3D globe.<br>Use the search below to pick a destination.</p></div></div>
           </div>
-          <div class="gm__panel">
-            <div class="gm__panel__bg" aria-hidden="true">
-              <span class="gm__orb gm__orb--1"></span>
-              <span class="gm__orb gm__orb--2"></span>
-              <span class="gm__orb gm__orb--3"></span>
+
+          <header class="gm__top">
+            <p class="gm__brand"><img src="images/logo2.png" alt="">UniVersity <span>· world</span></p>
+            <div class="gm__topbtns">
+              <button class="gm__iconbtn" id="gmTheme" aria-label="Toggle light or dark" title="Light / dark"><i class="fa-solid ${this.theme === 'dark' ? 'fa-sun' : 'fa-moon'}"></i></button>
+              <button class="gm__iconbtn" id="gmClose" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="gm__panel__head">
-              <div class="gm__panel__kicker"><span class="gm__live"></span> Live destination search</div>
-              <div class="gm__search">
-                <div class="gm__search__box">
-                  <i class="fa-solid fa-magnifying-glass"></i>
-                  <input id="gmSearchInput" type="text" autocomplete="off" spellcheck="false"
-                         role="combobox" aria-expanded="false" aria-controls="gmSuggest" aria-autocomplete="list"
-                         placeholder="Search country, city, region, or university destination…">
-                  <span class="gm__search__kbd">Esc</span>
-                </div>
-                <div class="gm__suggest" id="gmSuggest" role="listbox"></div>
+          </header>
+
+          <div class="gm__head">
+            <h2 class="gm__title">Where in the <em>world?</em></h2>
+            <p class="gm__subtitle"><span class="gm__dot"></span><span>Yellow dots: ${DATA_COUNTRIES.length} countries with full university data.<br>Search any other country too.</span></p>
+          </div>
+
+          <div class="gm__info" id="gmInfo"></div>
+
+          <div class="gm__dock">
+            <div class="gm__search">
+              <div class="gm__suggest" id="gmSuggest" role="listbox"></div>
+              <div class="gm__search__box">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input id="gmSearchInput" type="text" autocomplete="off" spellcheck="false"
+                       role="combobox" aria-expanded="false" aria-controls="gmSuggest" aria-autocomplete="list"
+                       placeholder="Search a country or city">
+                <kbd class="gm__search__kbd">Esc</kbd>
               </div>
             </div>
-            <div class="gm__quick">
-              <div class="gm__quick__label">Popular destinations</div>
-              <div class="gm__quick__row">${chips}</div>
-            </div>
-            <div class="gm__info" id="gmInfo">
-              <div class="gm__info__empty" id="gmInfoEmpty">
-                <div class="gm__quote">
-                  <img src="images/logo2.png" alt="">
-                  <p>“The world is a book, and those who do not travel <span>read only one page.”</span></p>
-                  <cite>Saint <b>Augustine</b></cite>
-                </div>
-              </div>
-            </div>
+            <div class="gm__quick" aria-label="Popular destinations">${chips}</div>
           </div>
+
+          <div class="gm__globe__controls">
+            <button class="gm__gc__btn" id="gmZoomIn" aria-label="Zoom in"><i class="fa-solid fa-plus"></i></button>
+            <button class="gm__gc__btn" id="gmZoomOut" aria-label="Zoom out"><i class="fa-solid fa-minus"></i></button>
+            <button class="gm__gc__btn" id="gmReset" aria-label="Reset view"><i class="fa-solid fa-rotate-left"></i></button>
+          </div>
+          <p class="gm__gc__hint">Drag to spin · scroll to zoom · click a country</p>
         </div>`;
     }
 
@@ -503,25 +524,28 @@ class RegionSelectionModal {
 
     _renderCard(code, name) {
         const r = regionInfo(code, name);
-        const flagUrl = `https://flagcdn.com/w320/${code}.png`;
-        const cities = r.cities.length
-            ? `<div class="gm__cities"><div class="gm__cities__label">Top student cities</div><div class="gm__cities__row">${r.cities.map((c) => `<span class="gm__city"><i class="fa-solid fa-location-dot"></i>${c}</span>`).join('')}</div></div>` : '';
+        const co = COORDS[code] || { lat: 0, lng: 0 };
+        const full = DATA_COUNTRIES.indexOf(code) !== -1;
+        const ll = `${Math.abs(co.lat).toFixed(1)}°${co.lat >= 0 ? 'N' : 'S'} · ${Math.abs(co.lng).toFixed(1)}°${co.lng >= 0 ? 'E' : 'W'}`;
+        const cities = r.cities.length ? `<div class="gm__cities">${r.cities.map((c) => `<span>${c}</span>`).join('')}</div>` : '';
         this.info.innerHTML = `
-        <div class="gm__card gm--show">
+        <article class="gm__card">
           <div class="gm__card__top">
-            <div class="gm__card__flag" style="background-image:url('${flagUrl}')"></div>
-            <div class="gm__card__head"><div class="gm__card__name">${name}</div><div class="gm__card__region"><i class="fa-solid fa-earth-americas"></i> ${r.cont}</div></div>
+            <span class="fi fi-${code} gm__card__flag"></span>
+            <span class="gm__card__ll">${ll}</span>
             <button class="gm__card__fav${host.isFav(code) ? ' is-fav' : ''}" id="gmFav" aria-label="Save to your countries" title="Save to your countries"><i class="fa-${host.isFav(code) ? 'solid' : 'regular'} fa-heart"></i></button>
           </div>
-          <div class="gm__stats">
-            <div class="gm__stat"><div class="gm__stat__k"><i class="fa-solid fa-building-columns"></i> Universities</div><div class="gm__stat__v">${r.count}</div></div>
-            <div class="gm__stat"><div class="gm__stat__k"><i class="fa-solid fa-coins"></i> Tuition / year</div><div class="gm__stat__v" style="font-size:15px">${r.fee}</div></div>
-          </div>
+          <h3 class="gm__card__name">${name}</h3>
+          <p class="gm__card__region">${r.cont}${full ? ' <b>· full data</b>' : ''}</p>
+          <dl class="gm__stats">
+            <div><dt>Universities</dt><dd>${r.count}</dd></div>
+            <div><dt>Tuition / year</dt><dd>${r.fee}</dd></div>
+          </dl>
           <p class="gm__card__sum">${r.sum}</p>
           ${cities}
           <button class="gm__card__cta" id="gmGo">Explore ${name} <i class="fa-solid fa-arrow-right"></i></button>
-          <div class="gm__card__hint">Opens the full destination guide</div>
-        </div>`;
+        </article>`;
+        requestAnimationFrame(() => { const c = this.info.querySelector('.gm__card'); if (c) c.classList.add('gm--show'); });
         const go = this.info.querySelector('#gmGo');
         go.addEventListener('click', () => this._commit(code));
         go.focus({ preventScroll: true });
@@ -545,7 +569,7 @@ class RegionSelectionModal {
             this.globe = new EarthGlobe(this.canvas, {
                 theme: this.theme,
                 onPick: (code) => this.select(code),
-                onError: (msg) => { const m = this.el.querySelector('#gmFallbackMsg'); if (m) m.innerHTML = msg + '<br>Use the search on the right instead.'; this.fallback.classList.add('gm--show'); }
+                onError: (msg) => { const m = this.el.querySelector('#gmFallbackMsg'); if (m) m.innerHTML = msg + '<br>Use the search below instead.'; this.fallback.classList.add('gm--show'); }
             });
             this.globe.onReady = () => this.loading.classList.add('gm--hide');
             this.globe.onFrame = () => this._trackPin();
@@ -554,7 +578,7 @@ class RegionSelectionModal {
             console.warn('[globe] WebGL unavailable:', err);
             this.loading.classList.add('gm--hide');
             const m = this.el.querySelector('#gmFallbackMsg');
-            if (m) m.innerHTML = 'Could not start WebGL: ' + (err && err.message ? err.message : err) + '<br>Use the search on the right instead.';
+            if (m) m.innerHTML = 'Could not start WebGL: ' + (err && err.message ? err.message : err) + '<br>Use the search below instead.';
             this.fallback.classList.add('gm--show');
         }
         setTimeout(() => this.input.focus({ preventScroll: true }), 450);

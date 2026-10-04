@@ -1,0 +1,518 @@
+{
+"BE": {
+"sectors": {
+"B-S": {
+"tertiary": null,
+"all": null
+},
+"J": {
+"tertiary": 66740,
+"all": 64457
+},
+"M": {
+"tertiary": 76343,
+"all": 71670
+},
+"C": {
+"tertiary": 70251,
+"all": 55582
+},
+"K": {
+"tertiary": 71104,
+"all": 67914
+},
+"Q": {
+"tertiary": 60302,
+"all": 50012
+},
+"R": {
+"tertiary": 53578,
+"all": 48265
+},
+"P": {
+"tertiary": 62576,
+"all": 60164
+}
+},
+"age": {
+"Y_LT30": 38114,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 53642
+}
+},
+"DK": {
+"sectors": {
+"B-S": {
+"tertiary": 76538,
+"all": 65794
+},
+"J": {
+"tertiary": 88912,
+"all": 84549
+},
+"M": {
+"tertiary": 91098,
+"all": 83886
+},
+"C": {
+"tertiary": 93318,
+"all": 74758
+},
+"K": {
+"tertiary": 99850,
+"all": 92490
+},
+"Q": {
+"tertiary": 64613,
+"all": 57649
+},
+"R": {
+"tertiary": 60603,
+"all": 50941
+},
+"P": {
+"tertiary": 69202,
+"all": 65277
+}
+},
+"age": {
+"Y_LT30": 44389,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 65622
+}
+},
+"DE": {
+"sectors": {
+"B-S": {
+"tertiary": 73216,
+"all": 50944
+},
+"J": {
+"tertiary": 84754,
+"all": 71201
+},
+"M": {
+"tertiary": 85243,
+"all": 66704
+},
+"C": {
+"tertiary": 88525,
+"all": 57949
+},
+"K": {
+"tertiary": 95114,
+"all": 74433
+},
+"Q": {
+"tertiary": 74702,
+"all": 47486
+},
+"R": {
+"tertiary": 53866,
+"all": 41360
+},
+"P": {
+"tertiary": 60788,
+"all": 52309
+}
+},
+"age": {
+"Y_LT30": 34307,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 51042
+}
+},
+"IE": {
+"sectors": {
+"B-S": {
+"tertiary": 66531,
+"all": 54120
+},
+"J": {
+"tertiary": 97765,
+"all": 90616
+},
+"M": {
+"tertiary": 72075,
+"all": 66466
+},
+"C": {
+"tertiary": 73382,
+"all": 57814
+},
+"K": {
+"tertiary": 82446,
+"all": 78060
+},
+"Q": {
+"tertiary": 59018,
+"all": 50182
+},
+"R": {
+"tertiary": 59354,
+"all": 43766
+},
+"P": {
+"tertiary": 61648,
+"all": 57133
+}
+},
+"age": {
+"Y_LT30": 36983,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 53862
+}
+},
+"ES": {
+"sectors": {
+"B-S": {
+"tertiary": 40742,
+"all": 31616
+},
+"J": {
+"tertiary": 41741,
+"all": 39426
+},
+"M": {
+"tertiary": 39149,
+"all": 35865
+},
+"C": {
+"tertiary": 43260,
+"all": 32909
+},
+"K": {
+"tertiary": 53884,
+"all": 50888
+},
+"Q": {
+"tertiary": 43485,
+"all": 33976
+},
+"R": {
+"tertiary": 34543,
+"all": 28000
+},
+"P": {
+"tertiary": 38152,
+"all": 36075
+}
+},
+"age": {
+"Y_LT30": 22954,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 31186
+}
+},
+"FR": {
+"sectors": {
+"B-S": {
+"tertiary": 49601,
+"all": 39833
+},
+"J": {
+"tertiary": 57859,
+"all": 56696
+},
+"M": {
+"tertiary": 57593,
+"all": 53502
+},
+"C": {
+"tertiary": 59132,
+"all": 44034
+},
+"K": {
+"tertiary": 63028,
+"all": 60545
+},
+"Q": {
+"tertiary": 44145,
+"all": 34919
+},
+"R": {
+"tertiary": 47832,
+"all": 42751
+},
+"P": {
+"tertiary": 42458,
+"all": 40719
+}
+},
+"age": {
+"Y_LT30": 27589,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 40679
+}
+},
+"IT": {
+"sectors": {
+"B-S": {
+"tertiary": 46953,
+"all": 37302
+},
+"J": {
+"tertiary": 50495,
+"all": 45696
+},
+"M": {
+"tertiary": 55621,
+"all": 48394
+},
+"C": {
+"tertiary": 55989,
+"all": 38429
+},
+"K": {
+"tertiary": 67687,
+"all": 63087
+},
+"Q": {
+"tertiary": 46059,
+"all": 37716
+},
+"R": {
+"tertiary": 42682,
+"all": 47697
+},
+"P": {
+"tertiary": 35669,
+"all": 32789
+}
+},
+"age": {
+"Y_LT30": 27060,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 36715
+}
+},
+"NL": {
+"sectors": {
+"B-S": {
+"tertiary": 68358,
+"all": 51834
+},
+"J": {
+"tertiary": 73662,
+"all": 67248
+},
+"M": {
+"tertiary": 77728,
+"all": 68012
+},
+"C": {
+"tertiary": 82602,
+"all": 57045
+},
+"K": {
+"tertiary": 92337,
+"all": 81692
+},
+"Q": {
+"tertiary": 60687,
+"all": 49716
+},
+"R": {
+"tertiary": 49490,
+"all": 42147
+},
+"P": {
+"tertiary": 63889,
+"all": 58583
+}
+},
+"age": {
+"Y_LT30": 34109,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 50942
+}
+},
+"PT": {
+"sectors": {
+"B-S": {
+"tertiary": null,
+"all": null
+},
+"J": {
+"tertiary": 39233,
+"all": 35317
+},
+"M": {
+"tertiary": 36096,
+"all": 31654
+},
+"C": {
+"tertiary": 34471,
+"all": 19464
+},
+"K": {
+"tertiary": 45915,
+"all": 41474
+},
+"Q": {
+"tertiary": 30923,
+"all": 21237
+},
+"R": {
+"tertiary": 31024,
+"all": 26863
+},
+"P": {
+"tertiary": 36251,
+"all": 33949
+}
+},
+"age": {
+"Y_LT30": 17452,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 23112
+}
+},
+"FI": {
+"sectors": {
+"B-S": {
+"tertiary": 57892,
+"all": 49696
+},
+"J": {
+"tertiary": 67183,
+"all": 64473
+},
+"M": {
+"tertiary": 61891,
+"all": 57886
+},
+"C": {
+"tertiary": 68179,
+"all": 55898
+},
+"K": {
+"tertiary": 69831,
+"all": 64558
+},
+"Q": {
+"tertiary": 49107,
+"all": 42813
+},
+"R": {
+"tertiary": 44312,
+"all": 40664
+},
+"P": {
+"tertiary": 53067,
+"all": 49154
+}
+},
+"age": {
+"Y_LT30": 37410,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 49426
+}
+},
+"SE": {
+"sectors": {
+"B-S": {
+"tertiary": 53446,
+"all": 46967
+},
+"J": {
+"tertiary": 63343,
+"all": 60864
+},
+"M": {
+"tertiary": 60098,
+"all": 57657
+},
+"C": {
+"tertiary": 60284,
+"all": 47346
+},
+"K": {
+"tertiary": 79706,
+"all": 69563
+},
+"Q": {
+"tertiary": 49057,
+"all": 43958
+},
+"R": {
+"tertiary": 44712,
+"all": 41510
+},
+"P": {
+"tertiary": 47302,
+"all": 43524
+}
+},
+"age": {
+"Y_LT30": 40169,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 46956
+}
+},
+"CH": {
+"sectors": {
+"B-S": {
+"tertiary": 128287,
+"all": 96985
+},
+"J": {
+"tertiary": 138580,
+"all": 122373
+},
+"M": {
+"tertiary": 142674,
+"all": 123569
+},
+"C": {
+"tertiary": 131502,
+"all": 95073
+},
+"K": {
+"tertiary": 174340,
+"all": 144083
+},
+"Q": {
+"tertiary": 111067,
+"all": 90122
+},
+"R": {
+"tertiary": 100368,
+"all": 85437
+},
+"P": {
+"tertiary": 115051,
+"all": 107220
+}
+},
+"age": {
+"Y_LT30": 70488,
+"Y30-39": null,
+"Y40-49": null,
+"Y50-59": null,
+"TOTAL": 95698
+}
+}
+}

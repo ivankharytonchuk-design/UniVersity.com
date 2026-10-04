@@ -43,7 +43,7 @@
             '<div class="obd__seg__lbl">Dream destination</div>' +
             '<div class="obd__chips obd__chips--sm">' + chips(COUNTRIES, state.country ? [state.country] : [], 'country') + '</div>' +
             '<div class="obd__seg__lbl" style="margin-top:16px">Yearly budget: <b id="obdBudgetVal">€' + state.budget.toLocaleString() + '</b></div>' +
-            '<input type="range" class="obd__range" id="obdBudget" min="1000" max="40000" step="500" value="' + state.budget + '">' +
+            '<input type="range" class="obd__range" id="obdBudget" min="1000" max="40000" step="250" value="' + state.budget + '">' +
         '</div>';
         return '<div class="obd__step">' +
             '<h2 class="obd__h">What matters most to you?</h2>' +

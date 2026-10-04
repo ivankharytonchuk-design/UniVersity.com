@@ -28,7 +28,8 @@ function resolveProvider() {
       name: 'groq',
       apiKey: key,
       baseURL: process.env.OPENAI_BASE_URL || 'https://api.groq.com/openai/v1',
-      model: process.env.OPENAI_MODEL || 'llama-3.3-70b-versatile',
+      // llama-3.3-70b-versatile was retired by Groq (404) — gpt-oss-120b is its current best general model.
+      model: process.env.OPENAI_MODEL || 'openai/gpt-oss-120b',
     };
   }
   return {
@@ -52,6 +53,8 @@ async function getOpenAI() {
 }
 
 function hasOpenAI() { return !!resolveProvider(); }
+// gpt-oss models "think" first and on Groq that counts toward max_tokens — keep it brief.
+function reasoningParams(model) { return /gpt-oss/.test(String(model || '')) ? { reasoning_effort: 'low' } : {}; }
 
 /* Turn the retrieved comments into a compact, numbered block for the prompt. */
 function commentsToContext(comments) {
@@ -116,7 +119,7 @@ async function synthesize(question, comments, opts) {
     'Write the answer now, following all the rules.';
 
   var provider = resolveProvider();
-  var completion = await client.chat.completions.create({
+  var completion = await client.chat.completions.create(Object.assign({
     model: (provider && provider.model) || MODEL,
     temperature: 0.65,
     max_tokens: 800,
@@ -124,7 +127,7 @@ async function synthesize(question, comments, opts) {
       { role: 'system', content: SYSTEM_PROMPT },
       { role: 'user', content: userMsg }
     ]
-  });
+  }, reasoningParams((provider && provider.model) || MODEL)));
 
   var answer = (completion.choices &&
                 completion.choices[0] &&
@@ -173,7 +176,7 @@ async function chat(system, userMsg, opts) {
   var client = await getOpenAI();
   if (!client) { var e = new Error('not_configured'); e.code = 'not_configured'; throw e; }
   var provider = resolveProvider();
-  var completion = await client.chat.completions.create({
+  var params = {
     model: (provider && provider.model) || MODEL,
     temperature: opts.temperature != null ? opts.temperature : 0.7,
     max_tokens: opts.maxTokens || 1100,
@@ -181,7 +184,11 @@ async function chat(system, userMsg, opts) {
       { role: 'system', content: system },
       { role: 'user', content: userMsg }
     ]
-  });
+  };
+  // Structured output: force a JSON object back (the prompt must mention JSON).
+  if (opts.json) params.response_format = { type: 'json_object' };
+  Object.assign(params, reasoningParams(params.model));
+  var completion = await client.chat.completions.create(params);
   var text = (completion.choices &&
               completion.choices[0] &&
               completion.choices[0].message &&
@@ -189,4 +196,4 @@ async function chat(system, userMsg, opts) {
   return { text: text, model: (provider && provider.model) || MODEL };
 }
 
-module.exports = { synthesize, hasOpenAI, chat, MODEL };
+module.exports = { synthesize, hasOpenAI, chat, MODEL, getOpenAI, resolveProvider };

@@ -16,7 +16,7 @@ on:
     # Weekly — every MONDAY at 09:00 UTC = 11:00 in Madrid (summer/CEST), 10:00 in
     # winter. Weekly gives news time to accumulate. NOTE: GitHub cron is UTC only
     # and scheduled runs can be delayed 5–30 min. (Last field: 1 = Monday.)
-    - cron: "0 9 * * 1"
+    - cron: "0 9 */2 * *"   # every 2 days ~11:00 CEST; emails only if saved unis have NEW news
   workflow_dispatch: {}
 
 jobs:

@@ -1,498 +1,226 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UniVersity Admin</title>
-    <link rel="icon" type="image/avif" href="images/Gogo.avif">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
-    <link rel="stylesheet" href="admin.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>UniVersity Admin</title>
+<link rel="icon" href="images/logo2.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300..800&family=Geist+Mono:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<script>try { if (localStorage.getItem('us_theme') === 'dark') document.documentElement.setAttribute('data-theme', 'dark'); } catch (e) {}</script>
+<link rel="stylesheet" href="admin.css?v=3">
 </head>
 <body>
 
+<!-- ── sign in ── -->
+<section class="login" id="login">
+    <form class="login__card" id="loginForm" autocomplete="on">
+        <div class="login__mark"><img src="images/logo2.png" alt=""></div>
+        <h1>UniVersity <em>Admin</em></h1>
+        <p class="login__sub">Signed-in sessions end after 30 minutes idle.</p>
+        <label class="fld"><span>Username</span><input id="lgUser" name="username" autocomplete="username" required value="admin"></label>
+        <label class="fld"><span>Password</span><span class="fld__pw"><input id="lgPw" name="password" type="password" autocomplete="current-password" required><button type="button" class="ib" id="lgEye" aria-label="Show password"><i class="fa-regular fa-eye"></i></button></span></label>
+        <div class="login__err" id="lgErr" role="alert"></div>
+        <button class="btn btn--ink btn--wide" id="lgGo" type="submit"><i class="fa-solid fa-arrow-right-to-bracket"></i> Sign in</button>
+        <a class="login__back" href="mainPage.html"><i class="fa-solid fa-arrow-left"></i> Back to the app</a>
+    </form>
+</section>
 
-<div class="adm__login__screen" id="admLoginScreen">
-    <div class="adm__login__card">
-        <div class="adm__login__logo">
-            <div class="adm__login__icon"><img src="images/Gogo.avif" alt="UniVersity"></div>
-            <div class="adm__login__brand">UniVersity <span>Admin</span></div>
-        </div>
-        <p class="adm__login__sub">Sign in to access the admin panel</p>
-
-        <div class="adm__field">
-            <label class="adm__label">Username</label>
-            <div class="adm__input__wrap">
-                <i class="fa-solid fa-user adm__input__icon"></i>
-                <input class="adm__input" type="text" id="admUser" placeholder="admin" autocomplete="username">
-            </div>
-            <span class="adm__field__err" id="admUserErr"></span>
-        </div>
-
-        <div class="adm__field">
-            <label class="adm__label">Password</label>
-            <div class="adm__input__wrap">
-                <i class="fa-solid fa-lock adm__input__icon"></i>
-                <input class="adm__input" type="password" id="admPw" placeholder="••••••••" autocomplete="current-password">
-                <button class="adm__eye" id="admPwEye" type="button"><i class="fa-solid fa-eye-slash"></i></button>
-            </div>
-            <span class="adm__field__err" id="admPwErr"></span>
-        </div>
-
-        <div class="adm__login__err" id="admLoginErr"></div>
-
-        <button class="adm__login__btn" id="admLoginBtn">
-            <i class="fa-solid fa-right-to-bracket"></i> Sign In
-        </button>
-
-        <a class="adm__back__link" href="mainPage.html">
-            <i class="fa-solid fa-arrow-left"></i> Back to UniVersity
-        </a>
-    </div>
-</div>
-
-<!-- ══════════════════════ ADMIN PANEL ══════════════════════ -->
-<div class="adm__panel" id="admPanel" style="display:none;">
-
-    <!-- Sidebar -->
-    <aside class="adm__sidebar" id="admSidebar">
-        <div class="adm__sidebar__brand">
-            <div class="adm__sidebar__icon"><img src="images/Gogo.avif" alt="UniVersity"></div>
-            <div>
-                <div class="adm__sidebar__title">UniVersity</div>
-                <div class="adm__sidebar__sub">Admin Panel</div>
-            </div>
-        </div>
-
-        <nav class="adm__nav">
-            <button class="adm__nav__item adm__nav__item--active" data-tab="overview">
-                <i class="fa-solid fa-gauge-high"></i><span>Overview</span>
-            </button>
-            <button class="adm__nav__item" data-tab="users">
-                <i class="fa-solid fa-users"></i><span>Users</span>
-                <span class="adm__nav__badge" id="navBadgeUsers">0</span>
-            </button>
-            <button class="adm__nav__item" data-tab="messages">
-                <i class="fa-solid fa-comments"></i><span>Messages</span>
-                <span class="adm__nav__badge" id="navBadgeMessages">0</span>
-            </button>
-            <button class="adm__nav__item" data-tab="saved">
-                <i class="fa-solid fa-bookmark"></i><span>Saved Unis</span>
-            </button>
-            <button class="adm__nav__item" data-tab="universities">
-                <i class="fa-solid fa-graduation-cap"></i><span>Universities</span>
-                <span class="adm__nav__badge" id="navBadgeUnis">0</span>
-            </button>
-            <button class="adm__nav__item" data-tab="cities">
-                <i class="fa-solid fa-city"></i><span>Cities</span>
-            </button>
-            <button class="adm__nav__item" data-tab="elite">
-                <i class="fa-solid fa-crown"></i><span>Elite</span>
-                <span class="adm__nav__badge" id="navBadgeElite">0</span>
-            </button>
-            <button class="adm__nav__item" data-tab="settings">
-                <i class="fa-solid fa-gear"></i><span>Settings</span>
-            </button>
+<!-- ── the panel ── -->
+<div class="app" id="app" hidden>
+    <aside class="side" id="side">
+        <div class="side__brand"><span class="side__mark"><img src="images/logo2.png" alt=""></span><b>UniVersity</b><em>Admin</em></div>
+        <nav class="side__nav" id="nav">
+            <button data-page="overview" class="is-on"><i class="fa-solid fa-gauge-high"></i> Overview</button>
+            <button data-page="people"><i class="fa-solid fa-users"></i> People <span class="side__n" id="nPeople"></span></button>
+            <button data-page="elite"><i class="fa-solid fa-crown"></i> Elite <span class="side__n" id="nElite"></span></button>
+            <button data-page="ai"><i class="fa-solid fa-wand-magic-sparkles"></i> AI usage <span class="side__n" id="nAI"></span></button>
+            <button data-page="content"><i class="fa-solid fa-database"></i> Content</button>
+            <button data-page="admissions"><i class="fa-solid fa-scale-balanced"></i> Admissions data <span class="side__n" id="nAdm"></span></button>
+            <button data-page="system"><i class="fa-solid fa-heart-pulse"></i> System <span class="side__dot" id="sysDot"></span></button>
+            <button data-page="audit"><i class="fa-solid fa-list-check"></i> Audit log</button>
+            <button data-page="settings"><i class="fa-solid fa-sliders"></i> Settings</button>
         </nav>
-
-        <div class="adm__sidebar__footer">
-            <div class="adm__admin__badge">
-                <div class="adm__admin__avatar">A</div>
-                <div>
-                    <div class="adm__admin__name">admin</div>
-                    <div class="adm__admin__role">Super Admin</div>
-                </div>
-            </div>
-            <button class="adm__logout__btn" id="admLogout" title="Sign Out">
-                <i class="fa-solid fa-right-from-bracket"></i>
-            </button>
+        <div class="side__me">
+            <span class="side__ava"><i class="fa-solid fa-user-shield"></i></span>
+            <span class="side__who"><b id="meName">admin</b><small id="meIdle">Session · 30 min idle limit</small></span>
+            <button class="ib" id="themeBtn" title="Theme" aria-label="Switch theme"><i class="fa-solid fa-moon"></i></button>
+            <button class="ib" id="logoutBtn" title="Sign out" aria-label="Sign out"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
         </div>
     </aside>
+    <div class="scrim" id="scrim"></div>
 
-    <!-- Main content -->
-    <main class="adm__main">
+    <main class="main">
+        <header class="top">
+            <button class="ib top__menu" id="menuBtn" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
+            <div class="top__t"><h2 id="pgTitle">Overview</h2><small id="pgSub">How UniVersity is doing</small></div>
+            <label class="top__search"><i class="fa-solid fa-magnifying-glass"></i><input id="gSearch" placeholder="Find a person by name or e-mail" autocomplete="off"><kbd>/</kbd></label>
+            <button class="btn btn--ghost" id="refreshBtn" title="Refresh"><i class="fa-solid fa-rotate"></i><span id="updated">Refresh</span></button>
+        </header>
+        <div class="warns" id="warns"></div>
 
-        <!-- Topbar -->
-        <div class="adm__topbar">
-            <button class="adm__menu__btn" id="admMenuBtn"><i class="fa-solid fa-bars"></i></button>
-            <div class="adm__topbar__title" id="admPageTitle">Overview</div>
-            <div class="adm__topbar__right">
-                <div class="adm__topbar__time" id="admClock"></div>
-                <button class="adm__refresh__btn" id="admRefresh" title="Refresh data">
-                    <i class="fa-solid fa-rotate-right"></i>
-                </button>
+        <!-- Overview -->
+        <section class="pg" data-pg="overview">
+            <div class="kpis" id="kpis"></div>
+            <div class="grid2">
+                <article class="card card--chart">
+                    <header class="card__hd"><h3>Last 30 days</h3><div class="seg" id="chartSeg"><button data-s="signups" class="is-on">Sign-ups</button><button data-s="active">Active</button><button data-s="ai">AI questions</button></div></header>
+                    <div class="chart" id="chart"></div>
+                </article>
+                <article class="card">
+                    <header class="card__hd"><h3>Newest people</h3><button class="lnk" data-go="people">All people <i class="fa-solid fa-arrow-right"></i></button></header>
+                    <ul class="mini" id="recent"></ul>
+                </article>
             </div>
-        </div>
+            <article class="card">
+                <header class="card__hd"><h3>System</h3><button class="lnk" data-go="system">Details <i class="fa-solid fa-arrow-right"></i></button></header>
+                <div class="sysrow" id="sysMini"></div>
+            </article>
+        </section>
 
-        <!-- ── TAB: OVERVIEW ── -->
-        <section class="adm__tab" id="tabOverview">
-            <div class="adm__stat__grid">
-                <div class="adm__stat__card adm__stat__card--blue">
-                    <div class="adm__stat__icon"><i class="fa-solid fa-users"></i></div>
-                    <div class="adm__stat__body">
-                        <div class="adm__stat__num" id="ovTotalUsers">0</div>
-                        <div class="adm__stat__label">Total Users</div>
-                    </div>
-                </div>
-                <div class="adm__stat__card adm__stat__card--orange">
-                    <div class="adm__stat__icon"><i class="fa-solid fa-comments"></i></div>
-                    <div class="adm__stat__body">
-                        <div class="adm__stat__num" id="ovTotalMessages">0</div>
-                        <div class="adm__stat__label">Chat Messages</div>
-                    </div>
-                </div>
-                <div class="adm__stat__card adm__stat__card--green">
-                    <div class="adm__stat__icon"><i class="fa-solid fa-bookmark"></i></div>
-                    <div class="adm__stat__body">
-                        <div class="adm__stat__num" id="ovTotalSaved">0</div>
-                        <div class="adm__stat__label">Saved Universities</div>
-                    </div>
-                </div>
-                <div class="adm__stat__card adm__stat__card--purple">
-                    <div class="adm__stat__icon"><i class="fa-solid fa-calendar-day"></i></div>
-                    <div class="adm__stat__body">
-                        <div class="adm__stat__num" id="ovTodayUsers">0</div>
-                        <div class="adm__stat__label">Joined Today</div>
-                    </div>
-                </div>
+        <!-- People -->
+        <section class="pg" data-pg="people" hidden>
+            <div class="bar">
+                <label class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="pSearch" placeholder="Search name or e-mail"></label>
+                <div class="seg" id="pFilter"><button data-f="all" class="is-on">All</button><button data-f="elite">Elite</button><button data-f="free">Free</button><button data-f="account">Accounts</button><button data-f="local">Browser-only</button></div>
+                <select class="sel" id="pSort"><option value="new">Newest first</option><option value="active">Recently active</option><option value="name">Name A–Z</option></select>
+                <button class="btn btn--ghost" id="csvBtn"><i class="fa-solid fa-file-csv"></i> Export CSV</button>
             </div>
+            <article class="card card--flush"><div class="tbl" id="pTable"></div></article>
+        </section>
 
-            <div class="adm__section__grid">
-                <div class="adm__card">
-                    <div class="adm__card__head">
-                        <span><i class="fa-solid fa-clock-rotate-left"></i> Recent Users</span>
-                    </div>
-                    <div class="adm__recent__list" id="ovRecentUsers"></div>
-                </div>
-                <div class="adm__card">
-                    <div class="adm__card__head">
-                        <span><i class="fa-solid fa-fire"></i> Most Active Chats</span>
-                    </div>
-                    <div class="adm__recent__list" id="ovActiveChats"></div>
-                </div>
+        <!-- Elite -->
+        <section class="pg" data-pg="elite" hidden>
+            <div class="kpis kpis--3" id="eKpis"></div>
+            <div class="grid2 grid2--rev">
+                <article class="card card--flush"><header class="card__hd card__hd--pad"><h3>Members</h3><small id="eNote"></small></header><div class="tbl" id="eTable"></div></article>
+                <article class="card">
+                    <header class="card__hd"><h3>Grant Elite</h3></header>
+                    <p class="muted">For partners, testers or support. Grants are logged with your reason and can be revoked any time.</p>
+                    <form id="grantForm" class="stack">
+                        <label class="fld"><span>Person</span><input id="gWho" list="peopleList" placeholder="name@email.com" required></label>
+                        <datalist id="peopleList"></datalist>
+                        <label class="fld"><span>Reason</span><input id="gWhy" placeholder="e.g. beta tester, school partnership" required maxlength="200"></label>
+                        <button class="btn btn--ink" type="submit"><i class="fa-solid fa-crown"></i> Grant Elite</button>
+                    </form>
+                </article>
             </div>
         </section>
 
-        <!-- ── TAB: USERS ── -->
-        <section class="adm__tab" id="tabUsers" style="display:none;">
-            <div class="adm__card">
-                <div class="adm__card__head">
-                    <span><i class="fa-solid fa-users"></i> All Users</span>
-                    <div class="adm__search__wrap">
-                        <i class="fa-solid fa-magnifying-glass"></i>
-                        <input class="adm__search" type="text" id="usersSearch" placeholder="Search users…">
-                    </div>
-                </div>
-                <div class="adm__table__wrap">
-                    <table class="adm__table">
-                        <thead>
-                            <tr>
-                                <th>User</th>
-                                <th>ID</th>
-                                <th>Joined</th>
-                                <th>Provider</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="usersTableBody"></tbody>
-                    </table>
-                </div>
-                <div class="adm__table__empty" id="usersEmpty" style="display:none;">
-                    <i class="fa-solid fa-users-slash"></i>
-                    <p>No users found</p>
-                </div>
+        <!-- AI -->
+        <section class="pg" data-pg="ai" hidden>
+            <div class="kpis" id="aKpis"></div>
+            <div class="grid2 grid2--rev">
+                <article class="card card--flush"><header class="card__hd card__hd--pad"><h3>Recent questions</h3><small>newest first</small></header><div class="tbl" id="aTable"></div></article>
+                <article class="card"><header class="card__hd"><h3>Most asked about</h3><small>30 days</small></header><ul class="bars" id="aSubjects"></ul></article>
             </div>
         </section>
 
-        <!-- ── TAB: MESSAGES ── -->
-        <section class="adm__tab" id="tabMessages" style="display:none;">
-            <div class="adm__card">
-                <div class="adm__card__head">
-                    <span><i class="fa-solid fa-comments"></i> Community Messages</span>
-                    <div class="adm__search__wrap">
-                        <i class="fa-solid fa-magnifying-glass"></i>
-                        <input class="adm__search" type="text" id="msgsSearch" placeholder="Search messages…">
-                    </div>
-                </div>
-                <div class="adm__msg__list" id="msgsList"></div>
-                <div class="adm__table__empty" id="msgsEmpty" style="display:none;">
-                    <i class="fa-solid fa-comment-slash"></i>
-                    <p>No messages yet</p>
-                </div>
+        <!-- Content -->
+        <section class="pg" data-pg="content" hidden>
+            <article class="card card--flush"><header class="card__hd card__hd--pad"><h3>Dataset health</h3><small>design/data — 15 countries</small></header><div class="tbl" id="cTable"></div></article>
+            <div class="grid2">
+                <article class="card"><header class="card__hd"><h3>Fix list</h3><div class="seg" id="cFilter"><button data-k="all" class="is-on">All</button><button data-k="duplicate">Duplicates</button><button data-k="tuition">Tuition</button><button data-k="website">Websites</button></div></header><ul class="issues" id="cIssues"></ul></article>
+                <article class="card"><header class="card__hd"><h3>Today's news brief</h3><small id="cNewsAt"></small></header><ul class="mini" id="cNews"></ul></article>
             </div>
         </section>
 
-        <!-- ── TAB: SAVED ── -->
-        <section class="adm__tab" id="tabSaved" style="display:none;">
-            <div class="adm__card">
-                <div class="adm__card__head">
-                    <span><i class="fa-solid fa-bookmark"></i> Saved Universities (per user)</span>
+        <!-- Admissions data -->
+        <section class="pg" data-pg="admissions" hidden>
+            <div class="kpis" id="admKpis"></div>
+            <article class="card card--flush">
+                <header class="card__hd card__hd--pad"><h3>Review queue</h3><small>Nothing from the web is published until it is approved here</small></header>
+                <div class="bar bar--pad">
+                    <div class="seg" id="admStatus"><button data-s="pending" class="is-on">Pending</button><button data-s="flagged">Possible duplicates</button><button data-s="approved">Published</button><button data-s="rejected">Rejected</button><button data-s="duplicate">Merged</button></div>
+                    <select class="sel" id="admType"><option value="">All sources</option><option value="public_self_report">Public reports</option><option value="user_reported">UniVersity users</option><option value="user_verified">Verified users</option><option value="official">Official</option></select>
+                    <label class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="admQ" placeholder="University, programme or quote"></label>
                 </div>
-                <div class="adm__saved__list" id="savedList"></div>
-                <div class="adm__table__empty" id="savedEmpty" style="display:none;">
-                    <i class="fa-solid fa-bookmark-slash"></i>
-                    <p>No saved universities found</p>
-                </div>
+                <div class="tbl" id="admTable"></div>
+                <div class="adm-more" id="admMore" hidden><button class="btn btn--ghost" id="admMoreBtn">Load more</button></div>
+            </article>
+            <div class="grid2">
+                <article class="card">
+                    <header class="card__hd"><h3>Search public reports</h3><small id="admRs"></small></header>
+                    <p class="muted">Runs in the background: the public Reddit archive (and the open web if a search key is set). Results land in the queue above.</p>
+                    <form id="admResearch" class="stack">
+                        <label class="fld"><span>University</span><input id="admUni" list="admUnis" placeholder="Start typing a name" required></label>
+                        <label class="fld"><span>Programme (optional)</span><input id="admProg" placeholder="e.g. Computer Science"></label>
+                        <div class="row"><button class="btn btn--ink" type="submit"><i class="fa-solid fa-magnifying-glass"></i> Queue search</button><label class="adm-chk"><input type="checkbox" id="admForce"> Ignore the 21-day cache</label></div>
+                    </form>
+                    <ul class="mini adm-jobs" id="admJobs"></ul>
+                </article>
+                <article class="card">
+                    <header class="card__hd"><h3>Add an official page</h3></header>
+                    <p class="muted">Paste an official admissions statistics, requirements or scholarship page (HTML or PDF). Figures are extracted with an exact quote and held for review below.</p>
+                    <form id="admOfficial" class="stack">
+                        <label class="fld"><span>University</span><input id="admOffUni" list="admUnis" placeholder="Start typing a name" required></label>
+                        <label class="fld"><span>Official URL</span><input id="admOffUrl" type="url" placeholder="https://…" required></label>
+                        <label class="fld"><span>Programme (optional)</span><input id="admOffProg" placeholder="e.g. Computer Science"></label>
+                        <button class="btn btn--ink" type="submit"><i class="fa-solid fa-building-columns"></i> Extract for review</button>
+                    </form>
+                </article>
             </div>
+            <article class="card card--flush">
+                <header class="card__hd card__hd--pad"><h3>Official data</h3><div class="seg" id="admOffSeg"><button data-s="pending" class="is-on">Pending</button><button data-s="approved">Published</button><button data-s="rejected">Rejected</button></div></header>
+                <div class="tbl" id="admOffTable"></div>
+            </article>
+            <datalist id="admUnis"></datalist>
         </section>
 
-        <!-- ── TAB: UNIVERSITIES ── -->
-        <section class="adm__tab" id="tabUniversities" style="display:none;">
-            <div class="adm__card">
-                <div class="adm__card__head">
-                    <span><i class="fa-solid fa-graduation-cap"></i> All Universities</span>
-                    <div class="adm__filter__row">
-                        <button class="adm__add__btn" id="addUniBtn"><i class="fa-solid fa-circle-plus"></i> Add University</button>
-                        <select class="adm__select" id="unisCountryFilter">
-                            <option value="all">All Countries</option>
-                            <option value="es">&#127466;&#127480; Spain</option>
-                            <option value="uk">&#127468;&#127463; United Kingdom</option>
-                            <option value="fr">&#127467;&#127479; France</option>
-                            <option value="de">&#127465;&#127466; Germany</option>
-                            <option value="it">&#127470;&#127481; Italy</option>
-                            <option value="pt">&#127477;&#127481; Portugal</option>
-                            <option value="us">&#127482;&#127480; United States</option>
-                            <option value="ch">&#127464;&#127469; Switzerland</option>
-                            <option value="ua">&#127482;&#127462; Ukraine</option>
-                        </select>
-                        <div class="adm__search__wrap">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                            <input class="adm__search" type="text" id="unisSearch" placeholder="Search universities…">
+        <!-- System -->
+        <section class="pg" data-pg="system" hidden>
+            <div class="health" id="health"></div>
+            <article class="card"><header class="card__hd"><h3>Server</h3></header><div class="facts" id="server"></div></article>
+        </section>
+
+        <!-- Audit -->
+        <section class="pg" data-pg="audit" hidden>
+            <div class="bar">
+                <label class="search"><i class="fa-solid fa-magnifying-glass"></i><input id="auSearch" placeholder="Filter by action, person or IP"></label>
+                <span class="muted"><i class="fa-solid fa-lock"></i> Append-only — entries can't be edited or deleted.</span>
+            </div>
+            <article class="card card--flush"><div class="tbl" id="auTable"></div></article>
+        </section>
+
+        <!-- Settings -->
+        <section class="pg" data-pg="settings" hidden>
+            <div class="grid2">
+                <article class="card">
+                    <header class="card__hd"><h3>Announcement banner</h3><small>shown at the top of the app</small></header>
+                    <form id="annForm" class="stack">
+                        <label class="fld"><span>Message</span><textarea id="annText" rows="2" maxlength="220" placeholder="e.g. New: the AI now reads Reddit and the news live."></textarea></label>
+                        <div class="row">
+                            <label class="fld"><span>Tone</span><select class="sel" id="annTone"><option value="info">Info</option><option value="good">Good news</option><option value="warn">Heads-up</option></select></label>
+                            <label class="fld"><span>Show for</span><select class="sel" id="annHours"><option value="24">1 day</option><option value="72">3 days</option><option value="168" selected>1 week</option><option value="">Until cleared</option></select></label>
                         </div>
-                    </div>
-                </div>
-                <div class="adm__table__wrap">
-                    <table class="adm__table">
-                        <thead>
-                            <tr>
-                                <th>University</th>
-                                <th>Country</th>
-                                <th>City</th>
-                                <th>Type</th>
-                                <th>Tuition</th>
-                                <th>Official website</th>
-                                <th>Fields</th>
-                                <th>Difficulty</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="unisTableBody"></tbody>
-                    </table>
-                </div>
-                <div class="adm__table__empty" id="unisEmpty" style="display:none;">
-                    <i class="fa-solid fa-graduation-cap"></i>
-                    <p>No universities found</p>
-                </div>
-                <div class="adm__pagination" id="unisPagination"></div>
+                        <label class="fld"><span>Link (optional)</span><input id="annLink" placeholder="https://…"></label>
+                        <div class="ann__prev" id="annPrev"></div>
+                        <div class="row"><button class="btn btn--ink" type="submit"><i class="fa-solid fa-bullhorn"></i> Publish</button><button class="btn btn--ghost" type="button" id="annClear">Clear banner</button></div>
+                    </form>
+                </article>
+                <article class="card">
+                    <header class="card__hd"><h3>Admin password</h3></header>
+                    <form id="pwForm" class="stack">
+                        <label class="fld"><span>Current password</span><input id="pwCur" type="password" autocomplete="current-password" required></label>
+                        <label class="fld"><span>New password</span><input id="pwNew" type="password" autocomplete="new-password" minlength="10" required></label>
+                        <div class="pwmeter" id="pwMeter"><i></i><span>At least 10 characters</span></div>
+                        <button class="btn btn--ink" type="submit"><i class="fa-solid fa-key"></i> Change password</button>
+                        <p class="muted">Changing it signs out every other admin session.</p>
+                    </form>
+                </article>
             </div>
         </section>
-
-        <!-- ── TAB: CITIES ── -->
-        <section class="adm__tab" id="tabCities" style="display:none;">
-            <div class="adm__card">
-                <div class="adm__card__head">
-                    <span><i class="fa-solid fa-city"></i> All Cities</span>
-                    <div class="adm__filter__row">
-                        <select class="adm__select" id="citiesCountryFilter">
-                            <option value="all">All Countries</option>
-                            <option value="es">&#127466;&#127480; Spain</option>
-                            <option value="uk">&#127468;&#127463; United Kingdom</option>
-                            <option value="fr">&#127467;&#127479; France</option>
-                            <option value="de">&#127465;&#127466; Germany</option>
-                            <option value="it">&#127470;&#127481; Italy</option>
-                            <option value="pt">&#127477;&#127481; Portugal</option>
-                            <option value="us">&#127482;&#127480; United States</option>
-                            <option value="ch">&#127464;&#127469; Switzerland</option>
-                            <option value="ua">&#127482;&#127462; Ukraine</option>
-                        </select>
-                        <div class="adm__search__wrap">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                            <input class="adm__search" type="text" id="citiesSearch" placeholder="Search cities…">
-                        </div>
-                    </div>
-                </div>
-                <div class="adm__table__wrap">
-                    <table class="adm__table">
-                        <thead>
-                            <tr>
-                                <th>City</th>
-                                <th>Country</th>
-                                <th>Region</th>
-                                <th>Population</th>
-                                <th>Climate</th>
-                                <th>Monthly Cost</th>
-                                <th>Tags</th>
-                            </tr>
-                        </thead>
-                        <tbody id="citiesTableBody"></tbody>
-                    </table>
-                </div>
-                <div class="adm__table__empty" id="citiesEmpty" style="display:none;">
-                    <i class="fa-solid fa-city"></i>
-                    <p>No cities found</p>
-                </div>
-                <div class="adm__pagination" id="citiesPagination"></div>
-            </div>
-        </section>
-
-        <!-- ── TAB: SETTINGS ── -->
-        <section class="adm__tab" id="tabElite" style="display:none;">
-            <div class="adm__card">
-                <div class="adm__card__head">
-                    <span><i class="fa-solid fa-crown"></i> Elite Members</span>
-                    <button class="adm__settings__btn" id="eliteRefresh" style="margin:0;padding:8px 14px"><i class="fa-solid fa-rotate"></i> Refresh</button>
-                </div>
-                <div class="adm__settings__body">
-                    <p class="adm__settings__desc">Everyone with an active Elite subscription — live from Stripe. These are exactly the people who receive the weekly news digest.</p>
-                    <div class="adm__field" id="eliteTokenWrap">
-                        <label class="adm__label">Server admin token <span style="opacity:.6">(the ADMIN_TOKEN you set in Render)</span></label>
-                        <div class="adm__input__wrap">
-                            <i class="fa-solid fa-key adm__input__icon"></i>
-                            <input class="adm__input" type="password" id="eliteToken" placeholder="Paste ADMIN_TOKEN…">
-                        </div>
-                        <button class="adm__settings__btn" id="eliteConnectBtn" style="margin-top:10px"><i class="fa-solid fa-plug"></i> Connect</button>
-                    </div>
-                    <div id="eliteStatus" style="margin:12px 0;font-size:13px;color:#8a909c"></div>
-                    <div id="eliteList"></div>
-                </div>
-            </div>
-        </section>
-
-        <section class="adm__tab" id="tabSettings" style="display:none;">
-            <div class="adm__settings__grid">
-                <div class="adm__card">
-                    <div class="adm__card__head"><span><i class="fa-solid fa-key"></i> Change Admin Password</span></div>
-                    <div class="adm__settings__body">
-                        <div class="adm__field">
-                            <label class="adm__label">Current Password</label>
-                            <div class="adm__input__wrap">
-                                <i class="fa-solid fa-lock adm__input__icon"></i>
-                                <input class="adm__input" type="password" id="settOldPw" placeholder="••••••••">
-                            </div>
-                        </div>
-                        <div class="adm__field">
-                            <label class="adm__label">New Password</label>
-                            <div class="adm__input__wrap">
-                                <i class="fa-solid fa-lock-open adm__input__icon"></i>
-                                <input class="adm__input" type="password" id="settNewPw" placeholder="••••••••">
-                            </div>
-                        </div>
-                        <div class="adm__field">
-                            <label class="adm__label">Confirm New Password</label>
-                            <div class="adm__input__wrap">
-                                <i class="fa-solid fa-lock-open adm__input__icon"></i>
-                                <input class="adm__input" type="password" id="settConfPw" placeholder="••••••••">
-                            </div>
-                        </div>
-                        <div class="adm__settings__err" id="settErr"></div>
-                        <button class="adm__settings__btn" id="settSaveBtn">
-                            <i class="fa-solid fa-floppy-disk"></i> Update Password
-                        </button>
-                    </div>
-                </div>
-
-                <div class="adm__card">
-                    <div class="adm__card__head"><span><i class="fa-solid fa-database"></i> Data Management</span></div>
-                    <div class="adm__settings__body">
-                        <p class="adm__settings__desc">Export or clear application data stored in the browser.</p>
-                        <div class="adm__data__btns">
-                            <button class="adm__data__btn adm__data__btn--blue" id="exportUsersBtn">
-                                <i class="fa-solid fa-file-export"></i> Export Users (JSON)
-                            </button>
-                            <button class="adm__data__btn adm__data__btn--blue" id="exportMsgsBtn">
-                                <i class="fa-solid fa-file-export"></i> Export Messages (JSON)
-                            </button>
-                            <button class="adm__data__btn adm__data__btn--red" id="clearMsgsBtn">
-                                <i class="fa-solid fa-trash"></i> Clear All Messages
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
     </main>
 </div>
 
-<!-- Add University Modal -->
-<div class="adm__modal__overlay" id="addUniOverlay">
-    <div class="adm__modal">
-        <div class="adm__modal__head">
-            <div class="adm__modal__title"><i class="fa-solid fa-graduation-cap"></i> Add University</div>
-            <button class="adm__modal__close" id="addUniClose"><i class="fa-solid fa-xmark"></i></button>
-        </div>
-        <div class="adm__modal__body">
-            <p class="adm__modal__hint"><i class="fa-solid fa-wand-magic-sparkles"></i> Just enter the essentials — UniVersity auto-generates the full description and details.</p>
-            <div class="adm__modal__grid">
-                <div class="adm__field adm__field--full">
-                    <label class="adm__label">University Name *</label>
-                    <input class="adm__input adm__input--plain" type="text" id="nuName" placeholder="e.g. University of Vienna">
-                </div>
-                <div class="adm__field">
-                    <label class="adm__label">Country *</label>
-                    <select class="adm__select" id="nuCountry">
-                        <option value="es">🇪🇸 Spain</option>
-                        <option value="uk">🇬🇧 United Kingdom</option>
-                        <option value="fr">🇫🇷 France</option>
-                        <option value="de">🇩🇪 Germany</option>
-                        <option value="it">🇮🇹 Italy</option>
-                        <option value="pt">🇵🇹 Portugal</option>
-                        <option value="us">🇺🇸 United States</option>
-                        <option value="ch">🇨🇭 Switzerland</option>
-                        <option value="ua">🇺🇦 Ukraine</option>
-                    </select>
-                </div>
-                <div class="adm__field">
-                    <label class="adm__label">City / Place *</label>
-                    <input class="adm__input adm__input--plain" type="text" id="nuCity" placeholder="e.g. Vienna">
-                </div>
-                <div class="adm__field">
-                    <label class="adm__label">Type</label>
-                    <select class="adm__select" id="nuType">
-                        <option value="Public">Public</option>
-                        <option value="Private">Private</option>
-                    </select>
-                </div>
-                <div class="adm__field">
-                    <label class="adm__label">Tuition</label>
-                    <input class="adm__input adm__input--plain" type="text" id="nuTuition" placeholder="e.g. €1,500/yr">
-                </div>
-                <div class="adm__field adm__field--full">
-                    <label class="adm__label">Official Website</label>
-                    <input class="adm__input adm__input--plain" type="text" id="nuWebsite" placeholder="e.g. www.univie.ac.at">
-                </div>
-            </div>
-            <div class="adm__modal__err" id="addUniErr"></div>
-        </div>
-        <div class="adm__modal__foot">
-            <button class="adm__modal__cancel" id="addUniCancel">Cancel</button>
-            <button class="adm__modal__save" id="addUniSave"><i class="fa-solid fa-floppy-disk"></i> Add University</button>
-        </div>
-    </div>
-</div>
+<aside class="drawer" id="drawer" aria-hidden="true"><div class="drawer__in" id="drawerIn"></div></aside>
+<div class="dscrim" id="dscrim"></div>
+<div class="modal" id="modal" role="dialog" aria-modal="true"><div class="modal__card" id="modalCard"></div></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
 
-<!-- Toast -->
-<div class="adm__toast" id="admToast">
-    <i class="fa-solid fa-circle-check"></i>
-    <span id="admToastMsg"></span>
-</div>
-
-<!-- Confirm Dialog -->
-<div class="adm__confirm__overlay" id="admConfirmOverlay">
-    <div class="adm__confirm__box">
-        <div class="adm__confirm__icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
-        <div class="adm__confirm__title" id="admConfirmTitle">Are you sure?</div>
-        <div class="adm__confirm__body" id="admConfirmBody"></div>
-        <div class="adm__confirm__btns">
-            <button class="adm__confirm__cancel" id="admConfirmCancel">Cancel</button>
-            <button class="adm__confirm__ok" id="admConfirmOk">Confirm</button>
-        </div>
-    </div>
-</div>
-
-<script src="data/app_data.js"></script>
-<script src="admin.js"></script>
+<script src="admin.js?v=4"></script>
 </body>
 </html>

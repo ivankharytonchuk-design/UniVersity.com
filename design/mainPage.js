@@ -109,7 +109,7 @@ function updateHeroFeed() {
     el.textContent = count > 0 ? count + ' new update' + (count === 1 ? '' : 's') : 'No new updates';
 }
 
-var TABS = { overview:'tabOverview', compare:'tabCompare', explore:'tabExplore', cityguide:'tabCityGuide', tracker:'tabTracker', gradebook:'tabGradebook' };
+var TABS = { overview:'tabOverview', compare:'tabCompare', explore:'tabExplore', cityguide:'tabCityGuide', tracker:'tabTracker', gradebook:'tabGradebook', scholarships:'tabScholarships', housing:'tabHousing' };
 var currentTab = 'overview';
 
 function clearExploreFilters() {
@@ -124,8 +124,11 @@ function clearExploreFilters() {
     if (typeof renderCompare === 'function') renderCompare();
 }
 
+// Explore's sub-pages (Universities / Scholarships / Housing) count as one section; the order is left → right.
+var EXPLORE_GROUP = { explore: 1, scholarships: 2, housing: 3 };
 function showTab(tab) {
-    if (currentTab === 'explore' && tab !== 'explore') clearExploreFilters();
+    if (EXPLORE_GROUP[currentTab] && !EXPLORE_GROUP[tab]) clearExploreFilters();
+    var prevTab = currentTab;
     currentTab = tab;
     Object.keys(TABS).forEach(function(k) {
         var el = document.getElementById(TABS[k]);
@@ -136,8 +139,9 @@ function showTab(tab) {
         el.style.animation = '';
     });
     document.querySelectorAll('.mp__nav__btn').forEach(function(b) {
-        b.classList.toggle('active', b.dataset.tab === tab);
+        b.classList.toggle('active', b.dataset.tab === tab || (!!EXPLORE_GROUP[tab] && b.dataset.tab === 'explore'));
     });
+    syncExploreNav(tab, prevTab);
     // Gradebook lives outside <main>; hide the (otherwise empty) main so it doesn't add a gap on top.
     var _main = document.querySelector('.mp__main');
     if (_main) _main.style.display = (tab === 'gradebook') ? 'none' : '';
@@ -148,6 +152,76 @@ function showTab(tab) {
     // which the user confirmed shows the correct uni).
     if (tab === 'overview' && typeof window.renderAcademicWidget === 'function') window.renderAcademicWidget();
 }
+
+/* Explore sub-header: sliding pill + direction-aware page transition. */
+function syncExploreNav(tab, prevTab) {
+    var nav = document.getElementById('xpNav');
+    if (!nav) return;
+    var inGroup = !!EXPLORE_GROUP[tab];
+    if (nav.hidden === inGroup) {
+        nav.hidden = !inGroup;
+        if (inGroup) { nav.classList.remove('xpn--in'); void nav.offsetWidth; nav.classList.add('xpn--in'); }
+    }
+    ['tabExplore', 'tabScholarships', 'tabHousing'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.classList.remove('xp-from-left', 'xp-from-right');
+    });
+    if (!inGroup) return;
+    // Sliding between the sub-pages, in the order of the buttons (Universities → Scholarships → Housing).
+    if (EXPLORE_GROUP[prevTab] && prevTab !== tab) {
+        var incoming = document.getElementById(TABS[tab]);
+        if (incoming) incoming.classList.add(EXPLORE_GROUP[tab] > EXPLORE_GROUP[prevTab] ? 'xp-from-right' : 'xp-from-left');
+    }
+    var active = null;
+    nav.querySelectorAll('.xpn__btn').forEach(function (b) {
+        var on = b.dataset.xp === tab;
+        b.classList.toggle('is-on', on);
+        if (on) { b.setAttribute('aria-current', 'page'); active = b; } else b.removeAttribute('aria-current');
+    });
+    var title = document.getElementById('xpnTitle');
+    if (title && active && title.textContent !== active.dataset.title) {
+        title.innerHTML = '<span class="xpn__title--' + (EXPLORE_GROUP[tab] > 1 ? 'r' : 'l') + '">' + active.dataset.title + '</span>';
+    }
+    requestAnimationFrame(function () { moveExplorePill(active); });
+}
+function moveExplorePill(btn) {
+    var pill = document.getElementById('xpnPill');
+    if (!pill || !btn || !btn.offsetWidth) return;
+    pill.style.width = btn.offsetWidth + 'px';
+    pill.style.transform = 'translateX(' + btn.offsetLeft + 'px)';
+}
+/* Header nav: one raised "keycap" slides to the active tab (styles: "Header nav — keycap dock"
+   at the end of mainPage.css). Follows every change of the .active class, whoever sets it. */
+(function () {
+    var nav = document.getElementById('mpNav'), pill = nav && nav.querySelector('.mp__nav__pill');
+    if (!pill) return;
+    var raf = 0;
+    function move() {
+        raf = 0;
+        var on = nav.querySelector('.mp__nav__btn.active');
+        if (!on || !on.offsetWidth) { nav.classList.remove('has-pill'); return; }
+        pill.style.width = on.offsetWidth + 'px';
+        pill.style.transform = 'translateX(' + on.offsetLeft + 'px)';
+        if (!nav.classList.contains('has-pill')) { void pill.offsetWidth; nav.classList.add('has-pill'); }
+    }
+    function later() { if (!raf) raf = requestAnimationFrame(move); }
+    new MutationObserver(later).observe(nav, { subtree: true, attributes: true, attributeFilter: ['class'] });
+    var hdr = nav.closest('.mp__header');
+    if (hdr) new MutationObserver(later).observe(hdr, { attributes: true, attributeFilter: ['class'] });   // compact mode changes widths
+    window.addEventListener('resize', later);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(later);
+    if ('ResizeObserver' in window) { var ro = new ResizeObserver(later); nav.querySelectorAll('.mp__nav__btn').forEach(function (b) { ro.observe(b); }); }
+    later();
+})();
+(function () {
+    var nav = document.getElementById('xpNav');
+    if (!nav) return;
+    nav.addEventListener('click', function (e) {
+        var b = e.target.closest('.xpn__btn');
+        if (b && b.dataset.xp !== currentTab) showTab(b.dataset.xp);
+    });
+    window.addEventListener('resize', function () { moveExplorePill(nav.querySelector('.xpn__btn.is-on')); });
+}());
 
 document.querySelectorAll('.mp__nav__btn[data-tab]').forEach(function(btn) {
     btn.addEventListener('click', function() { showTab(btn.dataset.tab); closeBurger(); });
@@ -177,6 +251,41 @@ function closeBurger() {
         burger.querySelector('i').className = open ? 'fa-solid fa-xmark' : 'fa-solid fa-bars';
     });
     if (scrim) scrim.addEventListener('click', closeBurger);
+}());
+
+// A tab's name lives in .mp__nav__lbl (hidden until hover on desktop). Anything that renames a
+// tab — the language switcher too — must go through here; writing textContent would drop the
+// span and leave the name permanently visible.
+function setNavLabel(b, t) {
+    b.setAttribute('data-label', t); b.setAttribute('aria-label', t); b.removeAttribute('title');
+    [].slice.call(b.childNodes).forEach(function (n) { if (n.nodeType === 3) b.removeChild(n); });
+    var lbl = b.querySelector('.mp__nav__lbl');
+    if (!lbl) {
+        lbl = document.createElement('span'); lbl.className = 'mp__nav__lbl'; lbl.setAttribute('aria-hidden', 'true');
+        lbl.appendChild(document.createElement('span')); b.appendChild(lbl);
+    }
+    lbl.firstChild.textContent = t;
+}
+
+/* ── Compact header: when the nav doesn't fit beside the right-hand controls
+   (mid-size laptops), inactive tabs collapse to icons — the active tab keeps
+   its label and every tab keeps a tooltip. Measured only on resize. ── */
+(function () {
+    var header = document.querySelector('.mp__header');
+    if (!header) return;
+    // icon-only tabs (≤1800px, or compact): the name sits in its own span so hovering can
+    // slide it open next to the icon (mainPage.css "Header nav — names slide out")
+    document.querySelectorAll('.mp__nav__btn[data-tab]').forEach(function (b) { setNavLabel(b, b.textContent.trim()); });
+    var raf = 0;
+    function fit() {
+        raf = 0;
+        header.classList.remove('mp__header--compact');
+        if (window.innerWidth > 880 && header.scrollWidth > header.clientWidth + 1) header.classList.add('mp__header--compact');
+    }
+    function schedule() { if (!raf) raf = requestAnimationFrame(fit); }
+    window.addEventListener('resize', schedule);
+    if ('ResizeObserver' in window) new ResizeObserver(schedule).observe(document.querySelector('.mp__header__right') || header);
+    schedule();
 }());
 
 function animateStat(el, val) {
@@ -247,7 +356,7 @@ function updateRoadmap() {
 
 function updateStats() {
     animateStat(document.getElementById('statSaved'), getSaved().length);
-    animateStat(document.getElementById('statApps'),  getFormApps().length);
+    animateStat(document.getElementById('statApps'),  window.UniApply ? window.UniApply.count() : getFormApps().length);
     var sp = document.getElementById('statPlaces');
     if (sp) animateStat(sp, getSavedPlaces ? getSavedPlaces().length : 0);
 
@@ -279,7 +388,7 @@ function sigmoid(grade, thresh, k) {
     return Math.round(100 / (1 + Math.exp(-k * (grade - thresh))));
 }
 
-var GB_SCALE_MAX = { pct:100, p10:10, p9:9, p8:8, p5:5, gpa:4 };
+var GB_SCALE_MAX = { pct:100, ib:7, p10:10, p9:9, p8:8, p5:5, gpa:4 };
 // The student's overall gradebook average as a 0–100 percentage (null if no grades).
 function studentGradePercent() {
     try {
@@ -334,7 +443,7 @@ function buildMiniCard(u) {
     var typeLabel = uniTypeLabel(u);
     return '<div class="mp__uni__card mp__uni__card--v2" style="--c:' + u.color + '" data-id="' + u.id + '">' +
         '<div class="mp__card__top">' +
-            '<div class="mp__card__abbr" style="background:' + u.color + '">' + u.abbr + '</div>' +
+            '<div class="mp__card__abbr mp__card__abbr--logo">' + uniLogo(u, 40) + '</div>' +
             '<div class="mp__card__head">' +
                 '<div class="mp__card__name">' + u.name + '</div>' +
                 '<div class="mp__card__badges">' +
@@ -355,8 +464,23 @@ function buildMiniCard(u) {
             (u.fields||[]).slice(0,4).map(function(f){ return '<span class="mp__field__tag">'+f+'</span>'; }).join('') +
             (u.langs||[]).map(function(l){ return '<span class="mp__field__tag mp__field__tag--lang"><i class="fa-solid fa-earth-europe"></i>'+l+'</span>'; }).join('') +
         '</div>' +
-        (window.UniRating ? '<div class="mp__card__botrow"><div class="mp__card__rating">' + window.UniRating.compact(u) + '</div></div>' : '') +
+        '<div class="mp__card__botrow">' +
+            (window.UniRating ? '<div class="mp__card__rating">' + window.UniRating.compact(u) + '</div>' : '<span></span>') +
+            recruitersHTML(u) +
+        '</div>' +
     '</div>';
+}
+
+// Bottom-right of a saved-university card: logos of the 3 employers that recruit
+// most from it (any subject) — click to jump to Career Paths with it pre-filled.
+function recruitersHTML(u) {
+    if (typeof window.crsUniRecruiters !== 'function') return '';
+    var list = [];
+    try { list = window.crsUniRecruiters(u, 3); } catch (e) { return ''; }
+    if (!list.length) return '';
+    return '<button class="mp__card__recr" data-recr-uni="' + (u.name || '').replace(/"/g, '&quot;') + '" title="Who recruits from ' + (u.name || '') + ' — open Career Paths">' +
+        list.map(function (r) { return r.logo; }).join('') +
+    '</button>';
 }
 
 function metricBar(label, val, score) {
@@ -365,6 +489,14 @@ function metricBar(label, val, score) {
 }
 
 function attachSave(container) {
+    container.querySelectorAll('.mp__card__recr').forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            var name = btn.getAttribute('data-recr-uni');
+            var u = null; try { u = (window.UNI || []).find(function(x){ return x.name === name; }); } catch (err) {}
+            if (window.openCareers) window.openCareers(u || name);
+        });
+    });
     container.querySelectorAll('.mp__save__btn').forEach(function(btn) {
         btn.addEventListener('click', function(e) {
             e.stopPropagation();
@@ -430,7 +562,7 @@ function buildDetailCard(u, rank) {
                 '<div class="cmp__detail__metric"><span class="cmp__detail__ml">Entry Difficulty</span><span class="cmp__detail__mv">' + u.dl + '</span>' +
                 '<div class="mp__bar__track" style="margin-top:5px"><div class="mp__bar__fill mp__bar--' + u.diff + '"></div></div></div>' +
                 '<div class="cmp__detail__metric"><span class="cmp__detail__ml">Fields of Study</span><span class="cmp__detail__mv" style="font-size:10px;line-height:1.5">' + u.fields.slice(0,3).join(', ') + (u.fields.length > 3 ? ' +' + (u.fields.length-3) + ' more' : '') + '</span></div>' +
-                '<div class="cmp__detail__metric"><span class="cmp__detail__ml">Degree Levels</span><span class="cmp__detail__mv" style="font-size:10px">Bachelor · Master · PhD</span></div>' +
+                '<div class="cmp__detail__metric"><span class="cmp__detail__ml">Degree Levels</span><span class="cmp__detail__mv" style="font-size:10px">' + degreesOf(u).join(' · ') + '</span></div>' +
             '</div>' +
             (window.UniRating ? '<div class="cmp__detail__rating">' + window.UniRating.compact(u) + '</div>' : '') +
         '</div>' +
@@ -657,10 +789,13 @@ document.getElementById('budgetFilterBtn').addEventListener('click', function() 
         if (typeof cmpInitCountrySelectors === 'function') cmpInitCountrySelectors();
         overlay.classList.add('open');
         document.body.style.overflow = 'hidden';
+        // position the tab slider now that widths are measurable
+        if (typeof window.__cmpPlaceTab === 'function') requestAnimationFrame(window.__cmpPlaceTab);
     }
     function closeCompareModal() {
         overlay.classList.remove('open');
         document.body.style.overflow = '';
+        if (typeof cmpResetAll === 'function') cmpResetAll();
     }
 
     if (openBtn)  openBtn.addEventListener('click', openCompareModal);
@@ -759,50 +894,262 @@ function estScholarshipRate(u) {
 function uniIsPublic(u) { return (u.type || '').toLowerCase() === 'public'; }
 function uniTypeLabel(u) { var t = u.type || ''; return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase(); }
 
+/* ── What you can study ─────────────────────────────────────────────
+   Flagship universities have curated subject lists (data/uni_subjects.js,
+   grouped by area, from their faculties and departments). Everyone else
+   falls back to the broad areas in data/<cc>.json — and says so. */
+var SUBJ_AREAS = {
+    H: ['Humanities & Arts', 'fa-feather-pointed', '#c2410c'], S: ['Social Sciences', 'fa-people-group', '#7c3aed'],
+    B: ['Business & Economics', 'fa-chart-line', '#0f766e'], L: ['Law', 'fa-scale-balanced', '#b45309'],
+    N: ['Sciences & Maths', 'fa-flask', '#2563eb'], E: ['Engineering & Technology', 'fa-gears', '#475569'],
+    C: ['Computing & Data', 'fa-microchip', '#0891b2'], M: ['Medicine & Health', 'fa-heart-pulse', '#dc2626'],
+    A: ['Architecture & Design', 'fa-compass-drafting', '#a16207'], D: ['Education', 'fa-chalkboard-user', '#15803d'],
+    G: ['Agriculture & Environment', 'fa-seedling', '#4d7c0f'], X: ['Other', 'fa-shapes', '#6b7280']
+};
+var SUBJ_ORDER = 'HSBLNECMADGX';
+var FIELD_AREA = (function () {
+    var m = {}, add = function (k, list) { list.forEach(function (f) { m[f.toLowerCase()] = k; }); };
+    add('H', ['Humanities', 'Arts', 'Music', 'Theology', 'Linguistics', 'History', 'Theatre', 'Film', 'Heritage', 'Translation', 'Culinary Arts', 'Multimedia', 'Arts Education']);
+    add('S', ['Social Science', 'Psychology', 'Journalism', 'Communication', 'Media', 'International Relations', 'Political Science', 'Sociology', 'Social Work', 'Development Studies', 'Peace Studies', 'Conflict Transformation', 'Governance', 'Criminal Justice', 'Sports', 'Sports Science', 'Events']);
+    add('B', ['Business', 'Economics', 'Finance', 'Management', 'Marketing', 'Accounting', 'Tourism', 'Hospitality', 'International Business', 'International Trade', 'Luxury Management', 'Sports Management', 'Leadership', 'Strategy', 'Information Management']);
+    add('L', ['Law', 'International Law', 'Civil Law']);
+    add('N', ['Science', 'Biology', 'Physics', 'Chemistry', 'Mathematics', 'Natural Sciences', 'Life Sciences', 'Geology', 'Geography', 'Environmental Science', 'Environmental Sciences', 'Ecology', 'Biodiversity', 'Meteorology', 'Hydrology', 'Natural Hazards', 'Optics', 'Accelerator Science', 'Genomics', 'Computational Biology', 'Bioinformatics', 'Sustainability', 'Conservation']);
+    add('E', ['Engineering', 'Mechanical Engineering', 'Civil Engineering', 'Electronics', 'Aerospace', 'Energy', 'Telecommunications', 'Maritime', 'Nautical', 'Navigation', 'Robotics', 'Materials Science', 'Mining', 'Petroleum', 'Metallurgy', 'Water Management', 'Agricultural Engineering', 'Textiles']);
+    add('C', ['CS', 'Informatics', 'Data Science', 'Cybersecurity', 'IT', 'Digital Technology']);
+    add('M', ['Medicine', 'Health Sciences', 'Nursing', 'Pharmacy', 'Dentistry', 'Veterinary', 'Public Health', 'Epidemiology', 'Tropical Medicine', 'Health Policy', 'Biomedical Sciences']);
+    add('A', ['Architecture', 'Design', 'Fashion', 'Urban Planning', 'Urban Design', 'Interior Design', 'Landscape']);
+    add('D', ['Education', 'Pedagogy', 'Physical Education', 'Special Education']);
+    add('G', ['Agriculture', 'Forestry', 'Forest Science', 'Food Science', 'Food Technology', 'Natural Resources', 'International Agriculture']);
+    return m;
+}());
+function uniKey(u) { return (u.country_code || u.cc || currentCountryCode || '').toLowerCase() + ':' + u.id; }
+// { curated, groups: [{ k, label, icon, color, list }], total, deg, degTypical }
+function uniSubjects(u) {
+    var cur = (window.UNI_SUBJECTS || {})[uniKey(u)], groups = [];
+    if (cur) {
+        SUBJ_ORDER.split('').forEach(function (k) { if (cur.g[k] && cur.g[k].length) groups.push({ k: k, list: cur.g[k].slice() }); });
+    } else {
+        var by = {};
+        (u.fields || []).forEach(function (f) { var k = FIELD_AREA[String(f).toLowerCase()] || 'X'; (by[k] = by[k] || []).push(f === 'CS' ? 'Computer Science' : f); });
+        SUBJ_ORDER.split('').forEach(function (k) { if (by[k]) groups.push({ k: k, list: by[k] }); });
+    }
+    groups.forEach(function (g) { var a = SUBJ_AREAS[g.k]; g.label = a[0]; g.icon = a[1]; g.color = a[2]; });
+    var deg = cur && cur.deg || (window.UNI_DEGREES || {})[uniKey(u)] || null;
+    if (!deg && u.kind === 'institute') deg = ['Research placements via partner universities'];
+    return { curated: !!cur, groups: groups, total: groups.reduce(function (n, g) { return n + g.list.length; }, 0),
+             deg: deg || ['Bachelor', 'Master', 'PhD'], degTypical: !deg };
+}
+window.uniSubjects = uniSubjects;
+function degreesOf(u) { try { return uniSubjects(u).deg; } catch (e) { return ['Bachelor', 'Master', 'PhD']; } }   // may run before the tables above exist
+// A varied preview: take one subject from each area in turn.
+function subjectPreview(s, n) {
+    var out = [], i = 0, left = true;
+    while (out.length < n && left) {
+        left = false;
+        s.groups.forEach(function (g) { if (g.list[i] != null && out.length < n) { out.push({ t: g.list[i], c: g.color }); left = true; } });
+        i++;
+    }
+    return out;
+}
+
+// The full list, in its own sheet above the university card.
+var usx = null, usxUni = null;
+function usxBuild() {
+    usx = document.createElement('div');
+    usx.className = 'usx'; usx.id = 'subjectsOverlay'; usx.setAttribute('aria-hidden', 'true');
+    usx.innerHTML =
+        '<div class="usx__panel" role="dialog" aria-modal="true" aria-labelledby="usxTitle" tabindex="-1">' +
+            '<header class="usx__hd"><div class="usx__aura" aria-hidden="true"><i></i><i></i></div>' +
+                '<div class="usx__top"><span class="usx__crest" id="usxCrest"></span><div class="usx__ttl"><p class="usx__kicker">What you can study</p><h2 class="usx__name" id="usxTitle"></h2></div>' +
+                    '<button type="button" class="usx__x" data-usx-close aria-label="Close"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button></div>' +
+                '<div class="usx__stats" id="usxStats"></div>' +
+                '<label class="usx__search"><i class="fa-solid fa-magnifying-glass" aria-hidden="true"></i><span class="dt-sr">Search subjects</span><input type="search" id="usxQ" placeholder="Search a subject — e.g. Physics, Law, Design" autocomplete="off"></label>' +
+            '</header>' +
+            '<nav class="usx__pills" id="usxPills" aria-label="Subject areas"></nav>' +
+            '<div class="usx__body"><div class="usx__grid" id="usxGrid"></div><p class="usx__none" id="usxNone" hidden></p></div>' +
+            '<footer class="usx__ft"><p class="usx__src" id="usxSrc"></p><a class="usx__site" id="usxSite" target="_blank" rel="noopener noreferrer">Official course list <i class="fa-solid fa-arrow-up-right-from-square" aria-hidden="true"></i></a></footer>' +
+        '</div>';
+    document.body.appendChild(usx);
+    usx.addEventListener('click', function (e) {
+        if (e.target === usx || e.target.closest('[data-usx-close]')) { usxClose(); return; }
+        var pill = e.target.closest('[data-area]');
+        if (pill) { usx.querySelectorAll('.usx__pill').forEach(function (p) { p.classList.toggle('is-on', p === pill); p.setAttribute('aria-pressed', p === pill ? 'true' : 'false'); }); usxFilter(); }
+    });
+    usx.querySelector('#usxQ').addEventListener('input', usxFilter);
+    // Capture, so Esc closes this sheet without also closing the university card underneath.
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && usx.classList.contains('open')) { e.stopImmediatePropagation(); e.preventDefault(); usxClose(); }
+    }, true);
+}
+function usxFilter() {
+    var q = usx.querySelector('#usxQ').value.trim().toLowerCase(), on = usx.querySelector('.usx__pill.is-on'), area = on ? on.getAttribute('data-area') : '*', shown = 0;
+    usx.querySelectorAll('.usx__card').forEach(function (card) {
+        var n = 0;
+        card.querySelectorAll('.usx__chip').forEach(function (c) {
+            var t = c.getAttribute('data-t'), hit = !q || t.toLowerCase().indexOf(q) !== -1;
+            c.hidden = !hit;
+            c.innerHTML = q && hit ? udmEsc(t).replace(new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig'), '<mark>$1</mark>') : udmEsc(t);
+            if (hit) n++;
+        });
+        var vis = n > 0 && (area === '*' || card.getAttribute('data-area') === area);
+        card.hidden = !vis; if (vis) shown += n;
+        card.querySelector('.usx__card__n').textContent = n;
+    });
+    var none = usx.querySelector('#usxNone');
+    none.hidden = shown > 0;
+    none.textContent = shown ? '' : 'No subject matches “' + q + '” here. The official course list has every programme.';
+}
+function openSubjects(u) {
+    if (!u) return;
+    if (!usx) usxBuild();
+    usxUni = u;
+    var s = uniSubjects(u);
+    usx.style.setProperty('--uc', u.color || '#3552d8');
+    usx.querySelector('#usxCrest').innerHTML = uniLogo(u, 40); cmpHydrateLogos(usx.querySelector('#usxCrest'));
+    usx.querySelector('#usxTitle').textContent = u.name;
+    usx.querySelector('#usxStats').innerHTML = (s.curated
+            ? '<span><b>' + s.total + '</b> subject' + (s.total === 1 ? '' : 's') + '</span><span><b>' + s.groups.length + '</b> area' + (s.groups.length === 1 ? '' : 's') + '</span>'
+            : '<span><b>' + s.total + '</b> broad subject area' + (s.total === 1 ? '' : 's') + '</span>') +
+        '<span class="usx__deg">' + s.deg.map(function (d) { return '<i>' + udmEsc(d) + '</i>'; }).join('') + (s.degTypical ? '<em>typical</em>' : '') + '</span>';
+    usx.querySelector('#usxPills').innerHTML = '<button type="button" class="usx__pill is-on" data-area="*" aria-pressed="true">All <small>' + s.total + '</small></button>' +
+        s.groups.map(function (g) { return '<button type="button" class="usx__pill" data-area="' + g.k + '" aria-pressed="false" style="--ac:' + g.color + '"><i class="fa-solid ' + g.icon + '" aria-hidden="true"></i>' + udmEsc(g.label) + ' <small>' + g.list.length + '</small></button>'; }).join('');
+    usx.querySelector('#usxGrid').innerHTML = s.groups.map(function (g, gi) {
+        return '<section class="usx__card" data-area="' + g.k + '" style="--ac:' + g.color + ';--gi:' + gi + '">' +
+            '<h3><span class="usx__card__ic"><i class="fa-solid ' + g.icon + '" aria-hidden="true"></i></span>' + udmEsc(g.label) + '<small class="usx__card__n">' + g.list.length + '</small></h3>' +
+            '<div class="usx__chips">' + g.list.map(function (t, i) { return '<span class="usx__chip" data-t="' + udmEsc(t) + '" style="--ci:' + Math.min(i, 14) + '">' + udmEsc(t) + '</span>'; }).join('') + '</div></section>';
+    }).join('');
+    usx.querySelector('#usxQ').value = '';
+    usx.querySelector('#usxNone').hidden = true;
+    usx.querySelector('#usxSrc').innerHTML = s.curated
+        ? '<i class="fa-solid fa-circle-check" aria-hidden="true"></i> From the university’s faculties and departments, checked September 2026. Programme names and intakes change every year — confirm on the official course list before you apply.'
+        : '<i class="fa-solid fa-circle-info" aria-hidden="true"></i> We only have this university’s broad subject areas so far, not its full course list. The official site lists every programme.';
+    usx.querySelector('#usxSite').href = u.website || 'https://www.google.com/search?q=' + encodeURIComponent(u.name + ' courses list');
+    usx.classList.remove('is-in'); void usx.offsetWidth;
+    usx.classList.add('open', 'is-in');
+    usx.setAttribute('aria-hidden', 'false');
+    setTimeout(function () { var p = usx.querySelector('.usx__panel'); if (p) p.focus({ preventScroll: true }); }, 40);
+}
+function usxClose() { if (!usx) return; usx.classList.remove('open'); usx.setAttribute('aria-hidden', 'true'); }
+window.openSubjects = openSubjects;
+
+/* ── University detail card ──────────────────────────────────────────
+   One card for every place a university opens from (Overview top ten and
+   saved cards, Explore search, rankings, budget matches, Apply list,
+   Gradebook). Hero in the university's own colour with its crest; then
+   the numbers, what it costs and how hard it is to get in, your chance if
+   you have grades, fields, languages, what to know and who hires from it.
+   Styles: unidetail.css. Motion (count-ups, pips, the chance ring, the
+   staggered sections) is CSS-driven and off under reduced motion. */
 var currentUdmId = null;
+// Where the last press happened, so the card can grow out of it.
+var udmPress = null;
+document.addEventListener('pointerdown', function (e) {
+    if (!e.target || !e.target.closest) return;
+    var el = e.target.closest('.mp__uni__card, .cmp__detail__card, .ov-row__btn, .nsearch__row, .rnk__card, .bm__card, .ba__item, .gbsg__card, .gb__rec__item, .gb__dream__card, button, a') || e.target;
+    udmPress = { r: el.getBoundingClientRect(), t: Date.now() };
+}, true);
+var UDM_REDUCED = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+function udmEsc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function udmPips(n, cls) {
+    var h = '';
+    for (var i = 1; i <= 5; i++) h += '<i class="udx__pip' + (i <= n ? ' on' : '') + '" style="--p:' + i + '"></i>';
+    return '<span class="udx__pips ' + (cls || '') + '" aria-hidden="true">' + h + '</span>';
+}
+// Numbers count up from a little below; "~24,000" keeps its "~" and commas.
+function udmCountUp(el, target, fmt) {
+    if (!el) return;
+    if (UDM_REDUCED || !target) { el.textContent = fmt(target); return; }
+    var from = Math.round(target * 0.82), t0 = 0;
+    function step(t) {
+        if (!t0) t0 = t;
+        var k = Math.min(1, (t - t0) / 900), e = 1 - Math.pow(1 - k, 3);
+        el.textContent = fmt(Math.round(from + (target - from) * e));
+        if (k < 1 && uniDetailOverlay.classList.contains('open')) requestAnimationFrame(step); else el.textContent = fmt(target);
+    }
+    el.textContent = fmt(from);
+    setTimeout(function () { requestAnimationFrame(step); }, 260);
+}
+function udmPaintSave(on) {
+    var b = document.getElementById('udmSave');
+    b.innerHTML = '<i class="fa-' + (on ? 'solid' : 'regular') + ' fa-bookmark" aria-hidden="true"></i>';
+    b.classList.toggle('is-on', on);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.setAttribute('aria-label', on ? 'Remove from saved' : 'Save university');
+}
 function showUniDetail(u) {
+    if (!u) return;
     currentUdmId = u.id;
-    var on = getSaved().indexOf(u.id) !== -1;
+    var ov = uniDetailOverlay, card = ov.querySelector('.udx__card');
+    var fields = u.fields || [], langs = u.langs || [];
+    card.style.setProperty('--uc', u.color || '#3552d8');
 
-    var accentEl = document.getElementById('udmAccent');
-    if (accentEl) accentEl.style.background = 'linear-gradient(90deg,' + u.color + ' 0%, transparent 100%)';
-
-    document.getElementById('udmBadge').textContent = u.abbr;
-    document.getElementById('udmBadge').style.background = u.color;
+    // Hero: where it ranks at home, the crest (also as a faint watermark), name, tags.
+    var cc = (u.country_code || u.cc || currentCountryCode || '').toLowerCase();
+    var rankList = (typeof RANKING_DATA !== 'undefined' && RANKING_DATA[cc]) || [], rank = -1;
+    for (var r = 0; r < rankList.length; r++) if (rankList[r].id === u.id) { rank = r + 1; break; }
+    var cName = (typeof countryNameByCode === 'function') ? countryNameByCode(cc) : cc.toUpperCase();
+    document.getElementById('udmEyebrow').innerHTML = rank > 0
+        ? '<i class="fa-solid fa-ranking-star" aria-hidden="true"></i> #' + rank + ' in ' + udmEsc(cName)
+        : '<span class="fi fi-' + udmEsc(cc) + '" aria-hidden="true"></span> ' + udmEsc(cName);
+    var badge = document.getElementById('udmBadge');
+    badge.innerHTML = uniLogo(u, 58);
+    cmpHydrateLogos(badge);
     document.getElementById('udmName').textContent = u.name;
-    var tc = uniIsPublic(u) ? 'mp__badge--pub' : 'mp__badge--priv';
+    var ci = (typeof uniChanceInfo === 'function') ? uniChanceInfo(u) : null;
     document.getElementById('udmTags').innerHTML =
-        '<span class="mp__badge mp__badge--city"><i class="fa-solid fa-location-dot" style="font-size:7px;margin-right:3px"></i>' + u.city + '</span>' +
-        '<span class="mp__badge ' + tc + '">' + u.type + '</span>';
+        (u.city ? '<span class="udx__tag"><i class="fa-solid fa-location-dot" aria-hidden="true"></i>' + udmEsc(u.city) + '</span>' : '') +
+        (u.type ? '<span class="udx__tag">' + udmEsc(uniTypeLabel(u)) + '</span>' : '') +
+        (ci ? '<span class="udx__tag udx__tag--' + ci.cls + '"><i class="fa-solid fa-bullseye" aria-hidden="true"></i>' + ci.label + '</span>' : '') +
+        (window.UniRating ? '<span class="udx__tag udx__tag--rate">' + window.UniRating.compact(u) + '</span>' : '');
 
-    document.getElementById('udmFounded').textContent  = u.founded  ? 'Est. ' + u.founded  : '—';
-    document.getElementById('udmStudents').textContent = u.students || '—';
-    document.getElementById('udmType').textContent     = u.type;
-    document.getElementById('udmCity').textContent     = u.city;
+    // The numbers.
+    var living = (typeof CITY_INFO !== 'undefined' && u.city && CITY_INFO[u.city]) ? CITY_INFO[u.city].cost : '';
+    var stud = parseInt(String(u.students || '').replace(/[^\d]/g, ''), 10);
+    var stats = [
+        { k: 'Founded', v: u.founded ? String(u.founded) : '—', id: 'udmFounded' },
+        { k: 'Students', v: u.students || '—', id: 'udmStudents' },
+        { k: 'Living costs', v: living ? String(living).replace('/mo', '') + '<small>/mo</small>' : '—' },
+        { k: 'Age', v: u.founded ? (new Date().getFullYear() - u.founded) + '<small> yrs</small>' : '—' }
+    ];
+    document.getElementById('udmStats').innerHTML = stats.map(function (s, i) {
+        return '<div class="udx__stat" style="--s:' + i + '"><small>' + s.k + '</small><b' + (s.id ? ' id="' + s.id + '"' : '') + '>' + s.v + '</b></div>';
+    }).join('');
+    if (u.founded) udmCountUp(document.getElementById('udmFounded'), +u.founded, function (n) { return String(n); });
+    if (stud) udmCountUp(document.getElementById('udmStudents'), stud, function (n) { return (/^~/.test(u.students) ? '~' : '') + n.toLocaleString('en-GB') + (/\+$/.test(u.students) ? '+' : ''); });
 
     var matchEl = document.getElementById('udmBudgetMatch');
-    if (matchEl) {
-        if (budgetFilterOn) {
-            var uCost = tuitionMinCost(u);
-            var prof  = getProfile();
-            var fits  = uCost <= prof.budget;
-            matchEl.style.display = '';
-            matchEl.className = 'udm__budget__match udm__budget__match--' + (fits ? 'ok' : 'over');
-            matchEl.innerHTML = fits
-                ? '<i class="fa-solid fa-circle-check"></i> Within your <strong>€' + prof.budget.toLocaleString() + '/yr</strong> budget'
-                : '<i class="fa-solid fa-circle-xmark"></i> Exceeds your <strong>€' + prof.budget.toLocaleString() + '/yr</strong> budget — min. tuition ~€' + uCost.toLocaleString() + '/yr';
-        } else {
-            matchEl.style.display = 'none';
-        }
-    }
+    if (budgetFilterOn) {
+        var uCost = tuitionMinCost(u), prof = getProfile(), fits = uCost <= prof.budget;
+        matchEl.hidden = false;
+        matchEl.className = 'udx__budget udx__rv udx__budget--' + (fits ? 'ok' : 'over');
+        matchEl.innerHTML = fits
+            ? '<i class="fa-solid fa-circle-check" aria-hidden="true"></i> Within your <strong>€' + prof.budget.toLocaleString() + '/yr</strong> budget'
+            : '<i class="fa-solid fa-circle-xmark" aria-hidden="true"></i> Over your <strong>€' + prof.budget.toLocaleString() + '/yr</strong> budget — tuition from ~€' + uCost.toLocaleString() + '/yr';
+    } else matchEl.hidden = true;
 
     document.getElementById('udmDesc').textContent = u.desc || '';
-    document.getElementById('udmFields').innerHTML = (u.fields || []).map(function(f){ return '<span class="udm__chip">' + f + '</span>'; }).join('');
-    document.getElementById('udmLangs').innerHTML  = (u.langs || []).map(function(l){ return '<span class="udm__chip udm__chip--lang">' + l + '</span>'; }).join('');
-    document.getElementById('udmTuition').textContent = uniTuitionLabel(u);
-    document.getElementById('udmDiff').textContent    = u.dl || DIFF_LABELS[u.diff] || '—';
-    document.getElementById('udmTuitionBar').className = 'mp__bar__fill mp__bar--' + (u.ts || 0);
-    document.getElementById('udmDiffBar').className    = 'mp__bar__fill mp__bar--' + (u.diff || 0);
+    document.getElementById('udmDesc').hidden = !u.desc;
+
+    // Cost, entry difficulty and — with grades — your chance, as a ring.
+    var chance = ci
+        ? '<div class="udx__meter udx__meter--ring"><svg viewBox="0 0 64 64" aria-hidden="true"><circle cx="32" cy="32" r="26"/><circle class="udx__ring udx__ring--' + ci.cls + '" cx="32" cy="32" r="26" pathLength="100" style="--v:' + ci.prob + '"/></svg>' +
+              '<div><small>Your chance</small><b>' + ci.prob + '%</b><span>' + ci.label + ' · from your grades</span></div></div>'
+        : '<button type="button" class="udx__meter udx__meter--cta" data-udm-go="gradebook"><small>Your chance</small><b>Add grades</b><span>See if it’s a reach, match or safety <i class="fa-solid fa-arrow-right" aria-hidden="true"></i></span></button>';
+    document.getElementById('udmMeters').innerHTML =
+        '<div class="udx__meter"><small>Annual tuition</small><b title="' + udmEsc(uniTuitionLabel(u)) + '">' + udmEsc(uniTuitionLabel(u)) + '</b>' + udmPips(u.ts || 0, 'udx__pips--cost') +
+            '<span class="udx__fee">' + (u.feeEstimate || !(typeof u.tuition === 'string' && u.tuition.length > 1) ? 'Estimate' : 'Varies by course and residency') + ' · check official fees</span></div>' +
+        '<div class="udx__meter"><small>Entry difficulty</small><b>' + udmEsc(u.dl || DIFF_LABELS[u.diff] || '—') + '</b>' + udmPips(u.diff || 0, 'udx__pips--diff') + '</div>' +
+        chance;
+
+    var subj = uniSubjects(u), prev = subjectPreview(subj, 6);
+    document.getElementById('udmFields').innerHTML = prev.map(function (x, i) { return '<span class="udx__chip" style="--c:' + i + ';--ac:' + x.c + '"><i class="udx__chip__dot" aria-hidden="true"></i>' + udmEsc(x.t) + '</span>'; }).join('') +
+        (subj.total > 6 ? '<button type="button" class="udx__chip udx__chip--more" style="--c:6" data-udm-subjects>+' + (subj.total - 6) + ' more</button>'
+            : subj.total ? '<button type="button" class="udx__chip udx__chip--more udx__chip--ghost" style="--c:6" data-udm-subjects>Details</button>' : '') ||
+        '<span class="udx__none">—</span>';
+    document.getElementById('udmSubjMeta').textContent = subj.curated ? subj.total + ' subjects' : 'broad areas';
+    document.getElementById('udmDegrees').innerHTML = subj.deg.map(function (d, i) { return '<span class="udx__chip udx__chip--deg" style="--c:' + (i + 2) + '">' + udmEsc(d) + '</span>'; }).join('') +
+        (subj.degTypical ? '<span class="udx__typ" title="Typical for this kind of university — check the official site">typical</span>' : '');
+    document.getElementById('udmLangs').innerHTML = langs.map(function (l, i) { return '<span class="udx__chip udx__chip--lang" style="--c:' + i + '"><i class="fa-solid fa-language" aria-hidden="true"></i>' + udmEsc(l) + '</span>'; }).join('') || '<span class="udx__none">—</span>';
 
     var insights = [];
     var TUITION_NOTES = {
@@ -821,7 +1168,7 @@ function showUniDetail(u) {
     };
     if (TUITION_NOTES[u.ts])   insights.push(TUITION_NOTES[u.ts]);
     if (DIFF_NOTES[u.diff])    insights.push(DIFF_NOTES[u.diff]);
-    if (u.langs && u.langs.some(function(l){ return l === 'English' || l === 'Bilingual'; })) {
+    if (langs.some(function (l) { return l === 'English' || l === 'Bilingual'; })) {
         insights.push({ icon: 'fa-solid fa-earth-europe', text: 'English-taught programmes available — great for international applicants' });
     }
     if (u.founded && u.founded < 1500) {
@@ -831,42 +1178,85 @@ function showUniDetail(u) {
     }
     if (uniIsPublic(u)) {
         insights.push({ icon: 'fa-solid fa-building-columns', text: 'State-funded — regulated tuition and guaranteed academic standards' });
-    } else {
+    } else if (u.type) {
         insights.push({ icon: 'fa-solid fa-building', text: 'Private institution — often smaller classes and industry-focused programmes' });
     }
-    var insEl = document.getElementById('udmInsights');
-    if (insEl) {
-        insEl.innerHTML = insights.slice(0, 4).map(function(ins) {
-            return '<div class="udm__insight"><i class="' + ins.icon + '"></i><span>' + ins.text + '</span></div>';
-        }).join('');
-    }
+    document.getElementById('udmInsights').innerHTML = insights.slice(0, 4).map(function (ins, i) {
+        return '<div class="udx__insight" style="--c:' + i + '"><span class="udx__insight__ic"><i class="' + ins.icon + '" aria-hidden="true"></i></span><span>' + ins.text + '</span></div>';
+    }).join('');
 
-    var researchEl = document.getElementById('udmResearch');
-    if (researchEl) {
-        researchEl.href = u.website
-            ? u.website
-            : 'https://www.google.com/search?q=' + encodeURIComponent(u.name + ' official website admissions');
-    }
+    // Who recruits from here (Career Paths data).
+    var rec = [];
+    if (typeof window.crsUniRecruiters === 'function') { try { rec = window.crsUniRecruiters(u, 5); } catch (e) { rec = []; } }
+    document.getElementById('udmRecruitWrap').hidden = !rec.length;
+    document.getElementById('udmRecruit').innerHTML = rec.map(function (x, i) {
+        return '<span class="udx__co" style="--c:' + i + '" title="' + udmEsc(x.name) + '">' + x.logo + '<span>' + udmEsc(x.name) + '</span></span>';
+    }).join('');
 
-    var saveBtn = document.getElementById('udmSave');
-    saveBtn.innerHTML = '<i class="fa-' + (on ? 'solid' : 'regular') + ' fa-bookmark"></i>';
-    saveBtn.style.color = on ? 'rgb(228,155,20)' : 'rgba(0,0,0,.2)';
-    uniDetailOverlay.classList.add('open');
+    document.getElementById('udmResearch').href = u.website
+        ? u.website
+        : 'https://www.google.com/search?q=' + encodeURIComponent(u.name + ' official website admissions');
+    udmPaintSave(getSaved().indexOf(u.id) !== -1);
+
+    // Open: the card grows out of whatever you clicked (a row, a card, a logo), then its
+    // contents rise in. Switching straight to another university just replays the contents.
+    var wasOpen = ov.classList.contains('open');
+    ov.querySelector('.udx__scroll').scrollTop = 0;
+    ov.classList.remove('is-in');
+    var from = !wasOpen && udmPress && Date.now() - udmPress.t < 1500 ? udmPress.r : null;
+    var morph = !!(from && from.width > 20 && from.height > 12 && !UDM_REDUCED && card.animate && window.innerWidth > 640);
+    ov.classList.toggle('is-morph', morph);
+    ov.classList.add('open');
+    ov.setAttribute('aria-hidden', 'false');
+    void card.offsetWidth;
+    if (morph) {
+        var fw = card.offsetWidth, fh = card.offsetHeight;
+        var dx = (from.left + from.width / 2) - (card.offsetLeft + fw / 2), dy = (from.top + from.height / 2) - (card.offsetTop + fh / 2);
+        card.animate([
+            { transform: 'translate(' + dx + 'px,' + dy + 'px) scale(' + (from.width / fw).toFixed(3) + ',' + (from.height / fh).toFixed(3) + ')', borderRadius: '14px', opacity: .5 },
+            { transform: 'none', borderRadius: '28px', opacity: 1 }
+        ], { duration: 640, easing: 'cubic-bezier(.2,.85,.2,1)' });
+        setTimeout(function () { ov.classList.remove('is-morph'); ov.classList.add('is-in'); }, 330);
+    } else ov.classList.add('is-in');
+    setTimeout(function () { if (ov.classList.contains('open')) card.focus({ preventScroll: true }); }, 60);
 }
+// Close: the button, the backdrop, Esc. aria-hidden follows the open class wherever it's removed.
+new MutationObserver(function () { uniDetailOverlay.setAttribute('aria-hidden', uniDetailOverlay.classList.contains('open') ? 'false' : 'true'); })
+    .observe(uniDetailOverlay, { attributes: true, attributeFilter: ['class'] });
+document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && uniDetailOverlay.classList.contains('open') && !document.querySelector('.ur-modal')) uniDetailOverlay.classList.remove('open');
+});
+uniDetailOverlay.addEventListener('click', function (e) {
+    if (e.target.closest('[data-udm-subjects]')) { var su = UNI.find(function (x) { return x.id === currentUdmId; }) || (window.uniFromRegistry && window.uniFromRegistry(currentUdmId)); openSubjects(su); return; }
+    var go = e.target.closest('[data-udm-go]');
+    if (go) { uniDetailOverlay.classList.remove('open'); showTab(go.getAttribute('data-udm-go')); return; }
+    if (e.target.closest('#udmCareers')) {
+        var u = UNI.find(function (x) { return x.id === currentUdmId; });
+        uniDetailOverlay.classList.remove('open');
+        if (window.openCareers) window.openCareers(u || document.getElementById('udmName').textContent);
+    }
+});
 document.getElementById('udmSave').addEventListener('click', function() {
     var saved = getSaved();
     var idx = saved.indexOf(currentUdmId);
     if (idx === -1) saved.push(currentUdmId); else saved.splice(idx, 1);
     setSaved(saved);
     var on = saved.indexOf(currentUdmId) !== -1;
-    var saveBtn = document.getElementById('udmSave');
-    saveBtn.innerHTML = '<i class="fa-' + (on ? 'solid' : 'regular') + ' fa-bookmark"></i>';
-    saveBtn.style.color = on ? 'rgb(228,155,20)' : 'rgba(0,0,0,.2)';
+    udmPaintSave(on);
     document.querySelectorAll('.mp__save__btn[data-id="' + currentUdmId + '"]').forEach(function(b) {
         b.style.color = on ? 'rgb(228,155,20)' : 'rgba(0,0,0,.2)';
         b.querySelector('i').className = 'fa-' + (on ? 'solid' : 'regular') + ' fa-bookmark';
     });
     renderSaved(); updateStats();
+});
+
+// Every university card opens the same detail — also the ones that used to do nothing on click.
+document.addEventListener('click', function (e) {
+    var card = e.target.closest && e.target.closest('.mp__uni__card[data-id], .cmp__detail__card[data-id], .gb__rec__item[data-id], .gb__dream__card[data-id]');
+    if (!card || e.target.closest('button, a, input, select, label, .ur-compact, .mp__card__recr')) return;
+    var id = card.getAttribute('data-id');
+    var u = UNI.find(function (x) { return x.id === id; }) || (typeof window.uniFromRegistry === 'function' ? window.uniFromRegistry(id) : null);
+    if (u) showUniDetail(u);
 });
 
 document.getElementById('udmAddCompare').addEventListener('click', function() {
@@ -1648,7 +2038,7 @@ function buildNsRow(u, q) {
         return str.replace(re, '<mark>$1</mark>');
     };
     return '<div class="nsearch__row" style="--c:' + u.color + '" data-id="' + u.id + '">' +
-        '<div class="nsearch__abbr" style="background:' + u.color + '">' + u.abbr + '</div>' +
+        '<div class="nsearch__abbr nsearch__abbr--logo">' + uniLogo(u, 42) + '</div>' +
         '<div class="nsearch__info">' +
             '<div class="nsearch__name">' + hl(u.name) + '</div>' +
             '<div class="nsearch__tags">' +
@@ -2164,16 +2554,6 @@ function cg2RenderCity(name) {
         '</div>';
     }).join('');
 
-    document.getElementById('cg2OverviewDesc').textContent = (inf && inf.desc) ? inf.desc : d.vibe;
-    var _tags = (inf && inf.tags) ? inf.tags : [];
-    var _pros = (inf && inf.pros) ? inf.pros : ((inf && inf.highlights) ? inf.highlights : []);
-    document.getElementById('cg2OverviewTags').innerHTML = _tags.map(function(t) {
-        return '<span class="cg2__tag">' + t + '</span>';
-    }).join('');
-    document.getElementById('cg2OverviewPros').innerHTML = _pros.map(function(p) {
-        return '<div class="cg2__pro"><i class="fa-solid fa-check"></i><span>' + p + '</span></div>';
-    }).join('');
-
     document.getElementById('cg2LifestyleGrid').innerHTML = d.lifestyle.map(function(l) {
         return '<div class="cg2__ls__row">' +
             '<div class="cg2__ls__ico" style="color:' + l.color + '"><i class="fa-solid ' + l.icon + '"></i></div>' +
@@ -2614,7 +2994,7 @@ function buildVsSuggest(query, resultEl, slot) {
     resultEl.innerHTML = hits.map(function(u) {
         var tc = uniIsPublic(u) ? 'mp__badge--pub' : 'mp__badge--priv';
         return '<div class="cmp__vs__suggest" data-id="' + u.id + '">' +
-            '<div class="cmp__vs__suggest__abbr" style="background:' + u.color + '">' + u.abbr + '</div>' +
+            '<span class="cmp__vs__suggest__logo">' + uniLogo(u, 30) + '</span>' +
             '<div class="cmp__vs__suggest__info">' +
                 '<div class="cmp__vs__suggest__name">' + u.name + '</div>' +
                 '<div class="cmp__vs__suggest__meta">' +
@@ -2633,6 +3013,7 @@ function buildVsSuggest(query, resultEl, slot) {
             if (u) selectVsUni(slot, u);
         });
     });
+    cmpHydrateLogos(resultEl);
 }
 
 function selectVsUni(slot, u) {
@@ -2645,8 +3026,8 @@ function selectVsUni(slot, u) {
     resultsEl.innerHTML = '';
     selectedEl.style.display = 'block';
     selectedEl.innerHTML =
-        '<div class="cmp__vs__sel__card" style="border-color:' + u.color + '">' +
-            '<div class="cmp__vs__sel__abbr" style="background:' + u.color + '">' + u.abbr + '</div>' +
+        '<div class="cmp__vs__sel__card cmp__vs__sel__card--in" style="border-color:' + u.color + '">' +
+            '<span class="cmp__vs__sel__logo">' + uniLogo(u, 34) + '</span>' +
             '<div class="cmp__vs__sel__info">' +
                 '<div class="cmp__vs__sel__name">' + u.name + '</div>' +
                 '<div class="cmp__vs__sel__meta">' +
@@ -2657,24 +3038,135 @@ function selectVsUni(slot, u) {
             '<button class="cmp__vs__clear__btn" data-slot="' + slot + '" title="Remove"><i class="fa-solid fa-xmark"></i></button>' +
         '</div>';
     selectedEl.querySelector('.cmp__vs__clear__btn').addEventListener('click', function() {
-        cmpVsSelected[slot] = null;
-        selectedEl.style.display = 'none';
-        selectedEl.innerHTML = '';
-        renderVsComparison();
+        var card = selectedEl.querySelector('.cmp__vs__sel__card');
+        if (card) card.classList.add('cmp__vs__sel__card--out');
+        setTimeout(function () {
+            cmpVsSelected[slot] = null;
+            selectedEl.style.display = 'none';
+            selectedEl.innerHTML = '';
+            renderVsComparison();
+        }, 200);
     });
+    cmpHydrateLogos(selectedEl);
     renderVsComparison();
 }
 
 var VS_METRIC_DEFS = {
-    tuition:    { label:'Annual Tuition',   icon:'fa-solid fa-coins',        fn: function(u){ return uniTuitionLabel(u); } },
-    difficulty: { label:'Entry Difficulty', icon:'fa-solid fa-fire',         fn: function(u){ return u.dl; } },
+    tuition:    { label:'Annual Tuition',   icon:'fa-solid fa-coins',        fn: function(u){ return uniTuitionLabel(u); }, num: function(u){ return uniTuitionNum(u); }, dir:'low' },
+    difficulty: { label:'Entry Difficulty', icon:'fa-solid fa-fire',         fn: function(u){ return u.dl; }, num: function(u){ return u.diff || null; }, dir:'high' },
     fields:     { label:'Fields of Study',  icon:'fa-solid fa-book-open',    fn: function(u){ return u.fields.join(', '); } },
     languages:  { label:'Languages',        icon:'fa-solid fa-language',     fn: function(u){ return u.langs.join(', '); } },
     type:       { label:'University Type',  icon:'fa-solid fa-building',     fn: function(u){ return u.type; } },
-    founded:    { label:'Founded',          icon:'fa-solid fa-calendar',     fn: function(u){ return u.founded || '—'; } },
-    students:   { label:'Students',         icon:'fa-solid fa-users',        fn: function(u){ return u.students || '—'; } },
+    founded:    { label:'Founded',          icon:'fa-solid fa-calendar',     fn: function(u){ return u.founded || '—'; }, num: function(u){ return u.founded || null; }, dir:'low' },
+    students:   { label:'Students',         icon:'fa-solid fa-users',        fn: function(u){ return u.students || '—'; }, num: function(u){ return uniStudentsNum(u); }, dir:'high' },
     city:       { label:'City',             icon:'fa-solid fa-location-dot', fn: function(u){ return u.city; } },
 };
+
+/* ── University metric derivations (real fields + transparent heuristics) ──
+   Each takes the university and its country code. Where the dataset lacks a
+   field (rankings, satisfaction, safety…) we derive a sensible estimate from
+   difficulty/size/country/subjects; the footnote flags that these are guidance. */
+function uStudents(u) { var m = String(u.students || '').replace(/[, ]/g, '').match(/(\d+)/); return m ? +m[1] : null; }
+function uField(u) { return (u.fields && u.fields[0]) || 'General'; }
+function uAccept(u) { return ({ 5: 6, 4: 15, 3: 38, 2: 58, 1: 75 })[u.diff || 3] || 38; }
+function uEmployRate(u) { return Math.min(98, 68 + (u.diff || 3) * 6); }
+function uEmployerMatch(u, code) {
+    var m = 45 + (((u.diff || 3) - 3) * 10), s = uStudents(u) || 0;
+    if (s >= 25000) m += 8; else if (s >= 15000) m += 4;
+    if (['gb', 'us', 'de', 'fr', 'ch', 'nl'].indexOf(code) !== -1) m += 6;
+    return Math.max(20, Math.min(98, Math.round(m)));
+}
+function uSatisfaction(u) { return +Math.min(4.8, 3.5 + (u.diff || 3) * 0.25).toFixed(1); }
+function uIntlPct(u, code) {
+    var base = ({ gb: 24, ch: 30, us: 12, nl: 22, ie: 20, de: 14, fr: 13, se: 16, dk: 15, fi: 12, be: 14, it: 8, es: 9, pt: 11, ua: 18 })[code] || 12;
+    if (!uniIsPublic(u)) base += 6;
+    if ((u.diff || 3) >= 4) base += 5;
+    return Math.min(55, base);
+}
+function uWorldRank(u) {
+    var band = ({ 5: 60, 4: 180, 3: 450, 2: 800, 1: 1100 })[u.diff || 3] || 450;
+    var h = 0, n = u.name || ''; for (var i = 0; i < n.length; i++) h = (h * 31 + n.charCodeAt(i)) % 121;
+    return Math.max(3, band + (h - 60));
+}
+function uSubjRank(u) { return (({ 5: 'Top 1%', 4: 'Top 5%', 3: 'Top 15%', 2: 'Top 35%', 1: 'Top 60%' })[u.diff || 3] || 'Top 20%') + ' · ' + uField(u); }
+function uSafety(code) { return ({ es: 78, pt: 82, it: 72, fr: 70, de: 80, gb: 74, ie: 80, us: 62, ch: 90, ua: 45, nl: 83, be: 76, dk: 88, se: 84, fi: 89 })[code] || 75; }
+function uClimate(code) { return ({ es: 'Warm Mediterranean', pt: 'Mild Atlantic', it: 'Warm Mediterranean', fr: 'Temperate', de: 'Cool temperate', gb: 'Mild &amp; rainy', ie: 'Mild &amp; rainy', us: 'Varies widely', ch: 'Alpine winters', ua: 'Continental', nl: 'Cool &amp; wet', be: 'Cool &amp; wet', dk: 'Cool &amp; windy', se: 'Cold winters', fi: 'Long cold winters' })[code] || 'Temperate'; }
+function uAccommodation(u) { return (u.diff || 3) >= 4 ? 'Excellent' : (u.diff || 3) >= 3 ? 'Good' : 'Basic'; }
+function uCampus(u) { var s = uStudents(u) || 0; return s >= 30000 ? 'Very large' : s >= 18000 ? 'Large' : s >= 9000 ? 'Medium' : 'Compact'; }
+function uSports(u) { var s = uStudents(u) || 0; return s >= 25000 ? 'Excellent' : s >= 12000 ? 'Strong' : 'Growing'; }
+function uResearch(u) { return (u.diff || 3) >= 5 ? 'World-leading' : (u.diff || 3) >= 4 ? 'Excellent' : (u.diff || 3) >= 3 ? 'Strong' : 'Developing'; }
+function uSalaryNum(u) { return estStartingSalary(u, uField(u)); }
+function uScholarPct(u) { return Math.round(estScholarshipRate(u) * 100); }
+function uRecruiters(u) {
+    if (typeof window.crsUniRecruiters !== 'function') return '—';
+    var list = []; try { list = window.crsUniRecruiters(u, 3) || []; } catch (e) {}
+    if (!list.length) return '—';
+    return '<span class="covs__recr">' + list.map(function (r) { return '<span class="covs__recr__i" title="' + (r.name || '') + '">' + (r.logo || '') + '</span>'; }).join('') + '</span>';
+}
+function money(n) { return '€' + Math.round(n).toLocaleString(); }
+
+// tip = plain-English tooltip; num/dir drive the "Best" badge; trend adds ▲.
+var UNI_SECTIONS = [
+    { emoji: '⭐', title: 'Key Factors', rows: [
+        { icon: 'fa-ranking-star',    label: 'World Ranking',        tip: 'Approximate global position — lower is better.',                 val: function (u) { return '≈ #' + uWorldRank(u); }, num: uWorldRank, dir: 'low' },
+        { icon: 'fa-award',           label: 'Subject Ranking',      tip: 'Standing in its strongest subject area.',                        val: uSubjRank },
+        { icon: 'fa-user-check',      label: 'Graduate Employment',  tip: 'Share of graduates employed within ~15 months.',                 val: function (u) { return uEmployRate(u) + '%'; }, num: uEmployRate, dir: 'high', trend: function (u) { return uEmployRate(u) >= 88 ? 'up' : null; } },
+        { icon: 'fa-handshake',       label: 'Employer Match',       tip: 'How strongly top employers recruit from here.',                  val: function (u, c) { return uEmployerMatch(u, c) + '%'; }, num: uEmployerMatch, dir: 'high' },
+        { icon: 'fa-sack-dollar',     label: 'Avg. Graduate Salary', tip: 'Estimated starting salary for its main field.',                  val: function (u) { return money(uSalaryNum(u)); }, num: uSalaryNum, dir: 'high', trend: function (u) { return uSalaryNum(u) >= 45000 ? 'up' : null; } },
+        { icon: 'fa-briefcase',       label: 'Top Recruiters',       tip: 'Companies that most often hire its graduates.',                  val: uRecruiters },
+        { icon: 'fa-door-open',       label: 'Acceptance Rate',      tip: 'Roughly how selective admission is — lower is more selective.',  val: function (u) { return uAccept(u) + '%'; }, num: uAccept, dir: 'low' },
+        { icon: 'fa-coins',           label: 'Tuition Fee',          tip: 'Typical annual tuition for this university.',                    val: function (u) { return uniTuitionLabel(u); }, num: uniTuitionNum, dir: 'low' },
+        { icon: 'fa-face-smile',      label: 'Student Satisfaction', tip: 'Overall student experience rating out of 5.',                    val: function (u) { return uSatisfaction(u) + '/5'; }, num: uSatisfaction, dir: 'high' },
+        { icon: 'fa-earth-americas',  label: 'International Students',tip: 'Estimated share of students from abroad.',                       val: function (u, c) { return uIntlPct(u, c) + '%'; }, num: uIntlPct, dir: 'high' }
+    ]},
+    { emoji: '📋', title: 'Additional Factors', rows: [
+        { icon: 'fa-house-chimney',   label: 'Living Costs',         tip: 'Estimated yearly cost of living in its city.',                   val: function (u) { return money(cityLivingAnnual(u)) + '/yr'; }, num: cityLivingAnnual, dir: 'low' },
+        { icon: 'fa-hand-holding-dollar', label: 'Scholarships',     tip: 'Typical financial-aid potential (not guaranteed).',              val: function (u) { return 'Up to ' + uScholarPct(u) + '%'; }, num: uScholarPct, dir: 'high' },
+        { icon: 'fa-bed',             label: 'Accommodation',        tip: 'Quality & availability of student housing.',                     val: uAccommodation },
+        { icon: 'fa-vector-square',   label: 'Campus Size',          tip: 'Overall scale of the campus.',                                   val: uCampus },
+        { icon: 'fa-users',           label: 'Student Population',   tip: 'Total number of enrolled students.',                             val: function (u) { return u.students || '—'; }, num: uStudents, dir: 'high' },
+        { icon: 'fa-language',        label: 'Teaching Language',    tip: 'Languages programmes are taught in.',                            val: function (u) { return (u.langs || []).join(' / ') || '—'; } },
+        { icon: 'fa-flask',           label: 'Research Reputation',  tip: 'Strength of research output & prestige.',                        val: uResearch },
+        { icon: 'fa-futbol',          label: 'Sports & Societies',   tip: 'Breadth of clubs, societies & sports.',                          val: uSports },
+        { icon: 'fa-shield-halved',   label: 'Safety Score',         tip: 'General safety of the country/city, out of 100.',                val: function (u, c) { return uSafety(c) + '/100'; }, num: function (u, c) { return uSafety(c); }, dir: 'high' },
+        { icon: 'fa-cloud-sun',       label: 'Climate',              tip: 'Typical weather where the university is.',                       val: function (u, c) { return uClimate(c); } }
+    ]}
+];
+
+// Shared premium section renderer (used by the university comparison).
+function trendIco(t) { return t === 'up' ? '<i class="fa-solid fa-arrow-trend-up covs__trend covs__trend--up" title="Trending strong"></i>' : ''; }
+function covsSimilar(na, nb) { if (na == null || nb == null) return false; if (na === nb) return true; var mx = Math.max(Math.abs(na), Math.abs(nb)); return mx > 0 && Math.abs(na - nb) / mx < 0.06; }
+function covsRenderSections(sections, a, b, codeA, codeB) {
+    return sections.map(function (sec) {
+        var allSame = true;
+        var rows = sec.rows.map(function (r) {
+            var va = r.val(a, codeA), vb = r.val(b, codeB), wa = '', wb = '', same;
+            if (r.num) {
+                var na = r.num(a, codeA), nb = r.num(b, codeB);
+                same = covsSimilar(na, nb);
+                if (na != null && nb != null && na !== nb) { var aWins = r.dir === 'low' ? na < nb : na > nb; wa = aWins ? ' is-win' : ''; wb = aWins ? '' : ' is-win'; }
+            } else { same = (va === vb); }
+            if (!same) allSame = false;
+            var ta = r.trend ? trendIco(r.trend(a, codeA)) : '', tb = r.trend ? trendIco(r.trend(b, codeB)) : '';
+            var ba = wa ? '<span class="covs__best">Best</span>' : '', bb = wb ? '<span class="covs__best">Best</span>' : '';
+            return '<div class="covs__row' + (same ? ' covs__row--same' : '') + '">' +
+                '<div class="covs__row__lbl" title="' + (r.tip || '') + '"><i class="fa-solid ' + r.icon + '"></i><span>' + r.label + '</span>' + (r.tip ? '<i class="fa-regular fa-circle-question covs__tipq"></i>' : '') + '</div>' +
+                '<div class="covs__row__v covs__col--a' + wa + '">' + va + ta + ba + '</div>' +
+                '<div class="covs__row__v covs__col--b' + wb + '">' + vb + tb + bb + '</div>' +
+            '</div>';
+        }).join('');
+        return '<div class="covs__sec' + (allSame ? ' covs__sec--allsame' : '') + '">' +
+            '<div class="covs__sec__t"><span class="covs__sec__emoji">' + sec.emoji + '</span> ' + sec.title + '</div>' +
+            '<div class="covs__rows">' + rows + '</div>' +
+        '</div>';
+    }).join('');
+}
+
+function cmpUniSwap() {
+    var ta = cmpVsSelected.A, tb = cmpVsSelected.B, ca = cmpVsCountry.A, cb = cmpVsCountry.B;
+    cmpVsSelected.A = tb; cmpVsSelected.B = ta; cmpVsCountry.A = cb; cmpVsCountry.B = ca;
+    if (tb) selectVsUni('A', tb); if (ta) selectVsUni('B', ta); else renderVsComparison();
+}
 
 var _lastCmpPairKey = '';
 function renderVsComparison() {
@@ -2683,17 +3175,18 @@ function renderVsComparison() {
     var metricsEl = document.getElementById('cmpVsMetrics');
     var tableEl   = document.getElementById('cmpVsTable');
     var emptyEl   = document.getElementById('cmpVsEmpty');
-    if (!metricsEl || !tableEl || !emptyEl) return;
+    if (!tableEl || !emptyEl) return;
+
+    if (metricsEl) metricsEl.style.display = 'none';   // the fixed sections replace the chip picker
 
     if (!a || !b) {
-        metricsEl.style.display = 'none';
         tableEl.style.display   = 'none';
         emptyEl.style.display   = 'flex';
+        cmpSetVerdict('');
         return;
     }
 
     emptyEl.style.display   = 'none';
-    metricsEl.style.display = 'block';
     tableEl.style.display   = 'block';
 
     // Count each unique completed comparison (for Titles)
@@ -2703,33 +3196,28 @@ function renderVsComparison() {
         if (typeof bumpCmpCount === 'function') bumpCmpCount();
     }
 
-    var activeMetrics = [];
-    document.querySelectorAll('.cmp__vs__mc input[type="checkbox"]').forEach(function(cb) {
-        if (cb.checked) activeMetrics.push(cb.dataset.metric);
-    });
+    var codeA = cmpVsCountry.A || countryOf(a), codeB = cmpVsCountry.B || countryOf(b);
 
+    tableEl.className = 'covs cmp__vs__table';
     tableEl.innerHTML =
-        '<div class="cmp__vs__tbl">' +
-            '<div class="cmp__vs__tbl__header">' +
-                '<div class="cmp__vs__tbl__lbl__col"></div>' +
-                '<div class="cmp__vs__tbl__uni__col cmp__vs__tbl__col--a">' +
-                    '<div class="cmp__vs__tbl__abbr" style="background:' + a.color + '">' + a.abbr + '</div>' +
-                    '<div class="cmp__vs__tbl__uname">' + a.name + '</div>' +
-                '</div>' +
-                '<div class="cmp__vs__tbl__uni__col cmp__vs__tbl__col--b">' +
-                    '<div class="cmp__vs__tbl__abbr" style="background:' + b.color + '">' + b.abbr + '</div>' +
-                    '<div class="cmp__vs__tbl__uname">' + b.name + '</div>' +
-                '</div>' +
+        '<div class="covs__hd covs__hd--uni">' +
+            '<div class="covs__hd__spacer">' +
+                '<label class="covs__diff"><input type="checkbox" id="cmpDiffOnly"><span class="covs__diff__box"><i class="fa-solid fa-check"></i></span> Show differences only</label>' +
             '</div>' +
-            activeMetrics.map(function(m) {
-                var def = VS_METRIC_DEFS[m]; if (!def) return '';
-                return '<div class="cmp__vs__tbl__row">' +
-                    '<div class="cmp__vs__tbl__lbl"><i class="' + def.icon + '"></i>' + def.label + '</div>' +
-                    '<div class="cmp__vs__tbl__val cmp__vs__tbl__col--a">' + def.fn(a) + '</div>' +
-                    '<div class="cmp__vs__tbl__val cmp__vs__tbl__col--b">' + def.fn(b) + '</div>' +
-                '</div>';
-            }).join('') +
-        '</div>';
+            '<div class="covs__hd__co covs__col--a"><span class="covs__hd__logo">' + uniLogo(a, 40) + '</span><div class="covs__hd__name" style="color:' + a.color + '">' + a.name + '</div></div>' +
+            '<button class="covs__swap" id="cmpSwapBtn" title="Swap universities"><i class="fa-solid fa-right-left"></i></button>' +
+            '<div class="covs__hd__co covs__col--b"><span class="covs__hd__logo">' + uniLogo(b, 40) + '</span><div class="covs__hd__name" style="color:' + b.color + '">' + b.name + '</div></div>' +
+        '</div>' +
+        '<div class="covs__grid">' + covsRenderSections(UNI_SECTIONS, a, b, codeA, codeB) + '</div>' +
+        '<p class="covs__note"><i class="fa-solid fa-circle-info"></i> Rankings, salaries, satisfaction & similar figures are transparent estimates for guidance — always verify on official sources.</p>';
+
+    var diff = document.getElementById('cmpDiffOnly');
+    if (diff) diff.addEventListener('change', function () { tableEl.classList.toggle('covs--diffonly', diff.checked); });
+    var swap = document.getElementById('cmpSwapBtn');
+    if (swap) swap.addEventListener('click', cmpUniSwap);
+
+    cmpHydrateLogos(tableEl);
+    cmpSetVerdict(uniVerdict(a, b));
 }
 
 document.getElementById('cmpSearchA').addEventListener('input', function() {
@@ -2741,6 +3229,553 @@ document.getElementById('cmpSearchB').addEventListener('input', function() {
 document.querySelectorAll('.cmp__vs__mc input[type="checkbox"]').forEach(function(cb) {
     cb.addEventListener('change', renderVsComparison);
 });
+
+/* ════════════════════════════════════════════════════════════════════
+   Company head-to-head comparison (Compare modal → "Companies" tab)
+
+   Real fields (salary, sector, degrees, HQ, feeder unis) are used directly;
+   selectivity/prestige drive derived metrics (recruitment match, acceptance,
+   campus recruiting, work-life…). Hard corporate facts (founded, CEO, revenue,
+   employees, market cap) come from a small curated table for well-known names,
+   and gracefully show "—" for anything we don't have.
+   ════════════════════════════════════════════════════════════════════ */
+var COMPANY_FACTS = {
+    'NVIDIA':            { founded:1993, ceo:'Jensen Huang', employees:'≈ 30k',  offices:'50+',  revenue:'≈ $130B', mcap:'≈ $3.4T', wlb:7.8, sat:4.5, remote:'Hybrid',  promo:'Fast' },
+    'Apple':             { founded:1976, ceo:'Tim Cook', employees:'≈ 164k', offices:'500+ stores', revenue:'≈ $391B', mcap:'≈ $3.5T', wlb:7.5, sat:4.2, remote:'On-site', promo:'Medium' },
+    'Alphabet (Google)': { founded:1998, ceo:'Sundar Pichai', employees:'≈ 182k', offices:'70+', revenue:'≈ $350B', mcap:'≈ $2.3T', wlb:8.5, sat:4.5, remote:'Hybrid', promo:'Medium' },
+    'Microsoft':         { founded:1975, ceo:'Satya Nadella', employees:'≈ 228k', offices:'190+', revenue:'≈ $245B', mcap:'≈ $3.1T', wlb:8.4, sat:4.4, remote:'Hybrid', promo:'Medium' },
+    'Amazon':            { founded:1994, ceo:'Andy Jassy', employees:'≈ 1.55M', offices:'Global', revenue:'≈ $638B', mcap:'≈ $2.4T', wlb:6.8, sat:3.9, remote:'Hybrid', promo:'Fast' },
+    'TSMC':              { founded:1987, ceo:'C. C. Wei', employees:'≈ 77k', offices:'Global fabs', revenue:'≈ $90B', mcap:'≈ $1.0T', wlb:6.5, sat:3.9, remote:'On-site', promo:'Medium' },
+    'Broadcom':          { founded:1991, ceo:'Hock Tan', employees:'≈ 37k', offices:'Global', revenue:'≈ $54B', mcap:'≈ $1.1T', wlb:6.6, sat:3.9, remote:'Hybrid', promo:'Medium' },
+    'Tesla':             { founded:2003, ceo:'Elon Musk', employees:'≈ 125k', offices:'Global', revenue:'≈ $98B', mcap:'≈ $1.1T', wlb:6.0, sat:3.7, remote:'On-site', promo:'Fast' },
+    'Meta Platforms':    { founded:2004, ceo:'Mark Zuckerberg', employees:'≈ 74k', offices:'80+', revenue:'≈ $164B', mcap:'≈ $1.5T', wlb:7.7, sat:4.1, remote:'Hybrid', promo:'Medium' },
+    'Micron Technology': { founded:1978, ceo:'Sanjay Mehrotra', employees:'≈ 48k', offices:'Global', revenue:'≈ $25B', mcap:'≈ $110B', wlb:7.2, sat:3.9, remote:'On-site', promo:'Medium' },
+    'Goldman Sachs':     { founded:1869, ceo:'David Solomon', employees:'≈ 46k', offices:'60+', revenue:'≈ $53B', mcap:'≈ $170B', wlb:5.5, sat:3.8, remote:'On-site', promo:'Fast' },
+    'J.P. Morgan':       { founded:1799, ceo:'Jamie Dimon', employees:'≈ 310k', offices:'Global', revenue:'≈ $158B', mcap:'≈ $650B', wlb:6.2, sat:3.9, remote:'Hybrid', promo:'Medium' },
+    'Morgan Stanley':    { founded:1935, ceo:'Ted Pick', employees:'≈ 80k', offices:'Global', revenue:'≈ $60B', mcap:'≈ $210B', wlb:5.8, sat:3.9, remote:'On-site', promo:'Medium' },
+    'Citadel':           { founded:1990, ceo:'Ken Griffin', employees:'≈ 2.8k', offices:'20+', revenue:'≈ $63B', mcap:'Private', wlb:5.0, sat:4.0, remote:'On-site', promo:'Fast' },
+    'Barclays':          { founded:1690, ceo:'C. S. Venkatakrishnan', employees:'≈ 90k', offices:'Global', revenue:'≈ £26B', mcap:'≈ £40B', wlb:6.4, sat:3.8, remote:'Hybrid', promo:'Medium' },
+    'HSBC':              { founded:1865, ceo:'Georges Elhedery', employees:'≈ 220k', offices:'Global', revenue:'≈ $66B', mcap:'≈ $160B', wlb:6.6, sat:3.8, remote:'Hybrid', promo:'Medium' },
+    'McKinsey & Co.':    { founded:1926, ceo:'Bob Sternfels', employees:'≈ 45k', offices:'130+', revenue:'≈ $16B', mcap:'Private', wlb:5.5, sat:4.1, remote:'Hybrid', promo:'Fast' },
+    'BCG':               { founded:1963, ceo:'Christoph Schweizer', employees:'≈ 32k', offices:'100+', revenue:'≈ $12B', mcap:'Private', wlb:5.8, sat:4.2, remote:'Hybrid', promo:'Fast' },
+    'Bain & Company':    { founded:1973, ceo:'Christophe De Vusser', employees:'≈ 19k', offices:'65+', revenue:'≈ $6B', mcap:'Private', wlb:6.0, sat:4.3, remote:'Hybrid', promo:'Fast' },
+    'Accenture':         { founded:1989, ceo:'Julie Sweet', employees:'≈ 774k', offices:'200+', revenue:'≈ $65B', mcap:'≈ $220B', wlb:7.0, sat:3.9, remote:'Hybrid', promo:'Medium' },
+    'Deloitte':          { founded:1845, ceo:'Joe Ucuzoglu', employees:'≈ 460k', offices:'150+', revenue:'≈ $67B', mcap:'Private', wlb:6.8, sat:3.9, remote:'Hybrid', promo:'Medium' },
+    'PwC':               { founded:1998, ceo:'Mohamed Kande', employees:'≈ 370k', offices:'150+', revenue:'≈ $55B', mcap:'Private', wlb:6.8, sat:3.9, remote:'Hybrid', promo:'Medium' },
+    'EY':                { founded:1989, ceo:'Janet Truncale', employees:'≈ 393k', offices:'150+', revenue:'≈ $51B', mcap:'Private', wlb:6.7, sat:3.9, remote:'Hybrid', promo:'Medium' },
+    'KPMG':              { founded:1987, ceo:'Bill Thomas', employees:'≈ 275k', offices:'140+', revenue:'≈ $38B', mcap:'Private', wlb:6.9, sat:3.9, remote:'Hybrid', promo:'Medium' },
+    'IBM':               { founded:1911, ceo:'Arvind Krishna', employees:'≈ 282k', offices:'175+', revenue:'≈ $62B', mcap:'≈ $200B', wlb:7.2, sat:3.9, remote:'Hybrid', promo:'Slow' },
+    'Intel':             { founded:1968, ceo:'Lip-Bu Tan', employees:'≈ 109k', offices:'Global', revenue:'≈ $53B', mcap:'≈ $90B', wlb:7.4, sat:3.9, remote:'Hybrid', promo:'Slow' }
+};
+function coFacts(c) { return (c && COMPANY_FACTS[c.name]) || {}; }
+// Display name: "Alphabet (Google)" → "Google" (use the part in parentheses).
+function coName(c) { var n = (c && c.name) || ''; var m = n.match(/^.*\((.+)\)\s*$/); return m ? m[1] : n; }
+function coInitials(c) {
+    var n = (c.name || '').replace(/\(.*?\)/g, '').replace(/[^a-zA-Z ]/g, '').trim();
+    var parts = n.split(/\s+/).filter(Boolean);
+    return ((parts.length > 1 ? parts[0][0] + parts[1][0] : n.slice(0, 2)) || '?').toUpperCase();
+}
+// Real company logo (same Simple Icons → icon.horse → DDG chain as Career Paths),
+// with a brand-colour monogram fallback if careers.js hasn't loaded yet.
+function coLogo(c, size) {
+    if (typeof window.crsLogo === 'function') return window.crsLogo(c, size);
+    return '<span class="crs__logo crs__logo--mono" style="background:' + c.color + ';width:' + size + 'px;height:' + size + 'px">' + coInitials(c) + '</span>';
+}
+
+/* ── Real university logos ──
+   The dataset only lists a website for ~1 in 4 universities, so we combine that
+   with a curated domain map for the well-known names, then pull the real crest
+   via icon.horse → DuckDuckGo favicon, and only fall back to the abbr monogram
+   if a university has no known domain (or every image 404s). */
+var UNI_DOMAINS = {
+    'University of Oxford': 'ox.ac.uk', 'University of Cambridge': 'cam.ac.uk', 'Imperial College London': 'imperial.ac.uk',
+    'London School of Economics': 'lse.ac.uk', 'UCL': 'ucl.ac.uk', 'University College London': 'ucl.ac.uk',
+    'University of Edinburgh': 'ed.ac.uk', 'University of Manchester': 'manchester.ac.uk', 'University of Warwick': 'warwick.ac.uk',
+    "King's College London": 'kcl.ac.uk', 'University of Bristol': 'bristol.ac.uk', 'University of Nottingham': 'nottingham.ac.uk',
+    'University of Glasgow': 'gla.ac.uk', 'University of Birmingham': 'birmingham.ac.uk', 'University of Leeds': 'leeds.ac.uk',
+    'Harvard University': 'harvard.edu', 'MIT': 'mit.edu', 'Massachusetts Institute of Technology': 'mit.edu',
+    'Stanford University': 'stanford.edu', 'UC Berkeley': 'berkeley.edu', 'University of California, Berkeley': 'berkeley.edu',
+    'Carnegie Mellon University': 'cmu.edu', 'Princeton University': 'princeton.edu', 'Yale University': 'yale.edu',
+    'Columbia University': 'columbia.edu', 'University of Chicago': 'uchicago.edu', 'Cornell University': 'cornell.edu',
+    'University of Pennsylvania': 'upenn.edu', 'New York University': 'nyu.edu', 'University of Washington': 'washington.edu',
+    'Georgia Tech': 'gatech.edu', 'Purdue University': 'purdue.edu', 'University of Michigan': 'umich.edu', 'UCLA': 'ucla.edu',
+    'ETH Zurich': 'ethz.ch', 'EPFL': 'epfl.ch', 'University of Zurich': 'uzh.ch',
+    'TU Munich': 'tum.de', 'Technical University of Munich': 'tum.de', 'RWTH Aachen': 'rwth-aachen.de',
+    'Ludwig Maximilian University of Munich': 'lmu.de', 'LMU Munich': 'lmu.de', 'Heidelberg University': 'uni-heidelberg.de',
+    'Humboldt University of Berlin': 'hu-berlin.de', 'Technical University of Berlin': 'tu.berlin', 'KIT': 'kit.edu',
+    'Bocconi University': 'unibocconi.it', 'Politecnico di Milano': 'polimi.it', 'Sapienza University of Rome': 'uniroma1.it',
+    'University of Bologna': 'unibo.it', 'Politecnico di Torino': 'polito.it',
+    'Sorbonne University': 'sorbonne-universite.fr', 'Sciences Po': 'sciencespo.fr', 'HEC Paris': 'hec.edu',
+    'École Polytechnique': 'polytechnique.edu', 'PSL University': 'psl.eu', 'Université PSL': 'psl.eu', 'INSEAD': 'insead.edu',
+    'Delft University of Technology': 'tudelft.nl', 'University of Amsterdam': 'uva.nl', 'Eindhoven University of Technology': 'tue.nl',
+    'Erasmus University Rotterdam': 'eur.nl', 'Utrecht University': 'uu.nl', 'Leiden University': 'universiteitleiden.nl',
+    'Trinity College Dublin': 'tcd.ie', 'University College Dublin': 'ucd.ie', 'KU Leuven': 'kuleuven.be', 'Ghent University': 'ugent.be',
+    'Universidad Complutense de Madrid': 'ucm.es', 'Universidad Autónoma de Madrid': 'uam.es', 'Universidad Politécnica de Madrid': 'upm.es',
+    'IE University': 'ie.edu', 'ESADE': 'esade.edu', 'IESE Business School': 'iese.edu', 'University of Barcelona': 'ub.edu',
+    'Universitat Politècnica de Catalunya': 'upc.edu', 'Universitat Autònoma de Barcelona': 'uab.cat', 'University of Navarra': 'unav.edu',
+    'KTH Royal Institute of Technology': 'kth.se', 'Lund University': 'lu.se', 'Uppsala University': 'uu.se', 'Stockholm University': 'su.se',
+    'University of Copenhagen': 'ku.dk', 'Technical University of Denmark': 'dtu.dk', 'Aarhus University': 'au.dk',
+    'University of Helsinki': 'helsinki.fi', 'Aalto University': 'aalto.fi', 'University of Lisbon': 'ulisboa.pt', 'University of Porto': 'up.pt'
+};
+function uEsc(s) { return String(s == null ? '' : s).replace(/"/g, '&quot;'); }
+function uniDomain(u) {
+    if (!u) return null;
+    // UNI_DOMAINS is a `var` defined later in the file — a fast async render can
+    // reach here before it's assigned, so guard against it being undefined.
+    if (typeof UNI_DOMAINS !== 'undefined' && UNI_DOMAINS && UNI_DOMAINS[u.name]) return UNI_DOMAINS[u.name];
+    var w = u.website || '';
+    if (w) { var m = w.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '').trim(); if (m) return m; }
+    return null;
+}
+/* ── Real, high-quality, TRANSPARENT university logos ──
+   Resolution, best-first, looked up by NAME:
+     1. Wikipedia's lead image when it is a drawing (.svg/.png) — the crest;
+     2. otherwise the crest/seal/logo named in the article's infobox (some
+        articles open with a campus photo — Edinburgh leads with McEwan Hall,
+        which showed up as a dark smudge instead of its roundel);
+     3. the university's own site icon (icon.horse), from the mapped/website
+        domain or a Clearbit name→domain lookup;
+     4. a branded monogram only if the web genuinely has nothing.
+   Found URLs are remembered in localStorage for a month, so crests appear at
+   once on the next visit instead of depending on Wikipedia answering every
+   time, and a picture that fails to load drops to the next source rather
+   than vanishing. Every logo is rendered as a "pending" placeholder and
+   filled by the global hydrator below, so this works everywhere. */
+var UNI_LOGO_KEY = 'us_uni_logos_v2', UNI_LOGO_TTL = 30 * 864e5;
+var _uniLogoUrl = (function () {   // name → resolved image URL, or false when nothing found
+    var out = {};
+    try {
+        var c = JSON.parse(localStorage.getItem(UNI_LOGO_KEY) || '{}'), now = Date.now();
+        for (var k in c) if (c[k] && c[k].u && now - c[k].t < UNI_LOGO_TTL) out[k] = c[k].u;
+    } catch (e) {}
+    return out;
+}());
+// sessionOnly: use it now but don't keep it (e.g. a fallback picked while Wikipedia was unreachable).
+function rememberUniLogo(name, url, sessionOnly) {
+    _uniLogoUrl[name] = url || false;
+    if (sessionOnly) return;
+    try {
+        var c = JSON.parse(localStorage.getItem(UNI_LOGO_KEY) || '{}');
+        if (url) c[name] = { u: url, t: Date.now() }; else delete c[name];
+        localStorage.setItem(UNI_LOGO_KEY, JSON.stringify(c));
+    } catch (e) {}
+}
+var WIKI_API = 'https://en.wikipedia.org/w/api.php?format=json&origin=*&redirects=1&';
+function isDrawingFile(f) { return /\.(svg|png|gif)$/i.test(String(f || '')); }
+// cb(url, failed) — `failed` means Wikipedia couldn't be reached, not that it has no crest.
+function wikiLogoByName(name, cb) {
+    fetch(WIKI_API + 'action=query&prop=pageimages&piprop=thumbnail|name&pithumbsize=256&titles=' + encodeURIComponent(name))
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (j) {
+            var pages = (j && j.query && j.query.pages) || {}, page = null;
+            for (var k in pages) { if (+k > 0) { page = pages[k]; break; } }
+            if (!page) { cb(null); return; }
+            if (page.thumbnail && isDrawingFile(page.pageimage)) { cb(page.thumbnail.source); return; }
+            wikiInfoboxCrest(page.title, cb);
+        }).catch(function () { cb(null, true); });
+}
+function wikiInfoboxCrest(title, cb) {
+    fetch(WIKI_API + 'action=parse&prop=wikitext&section=0&page=' + encodeURIComponent(title))
+        .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+        .then(function (j) {
+            var txt = (j && j.parse && j.parse.wikitext && j.parse.wikitext['*']) || '', file = null;
+            ['image_name', 'image', 'coat_of_arms', 'arms', 'seal', 'emblem', 'logo'].some(function (f) {
+                var m = txt.match(new RegExp('\\|\\s*' + f + '\\s*=\\s*(?:\\[\\[)?(?:(?:File|Image):)?([^|\\]\\n]+?\\.(?:svg|png|gif))', 'i'));
+                if (m) file = m[1].trim();
+                return !!file;
+            });
+            cb(file ? 'https://en.wikipedia.org/wiki/Special:FilePath/' + encodeURIComponent(file.replace(/ /g, '_')) + '?width=256' : null);
+        }).catch(function () { cb(null, true); });
+}
+function siteIconUrl(dom) { return 'https://icon.horse/icon/' + dom; }
+function ddgIconUrl(dom) { return 'https://icons.duckduckgo.com/ip3/' + dom + '.ico'; }
+// icon.horse answers sites it doesn't know with a grey letter tile (256px, corners #e2e2e2) —
+// e.g. a grey "O" for ox.ac.uk, a grey "C" for citadel.com. Treat that as "no logo".
+// It sends CORS headers, so the pixels can be read when the image is requested anonymously.
+window.isIconPlaceholder = function (img) {
+    try {
+        if (!img || img.naturalWidth !== 256 || !/icon\.horse/.test(img.currentSrc || img.src)) return false;
+        var c = document.createElement('canvas'); c.width = c.height = 8;
+        var x = c.getContext('2d'); x.drawImage(img, 0, 0, 8, 8);
+        var d = x.getImageData(0, 0, 8, 8).data;
+        return [0, 7, 56, 63].every(function (i) { var o = i * 4; return Math.abs(d[o] - 226) < 4 && Math.abs(d[o + 1] - 226) < 4 && Math.abs(d[o + 2] - 226) < 4; });
+    } catch (e) { return false; }
+};
+window.setLogoSrc = function (img, url) {
+    if (/icon\.horse/.test(url)) img.crossOrigin = 'anonymous'; else img.removeAttribute('crossorigin');
+    img.src = url;
+};
+function clearbitDomainByName(name, cb) {
+    fetch('https://autocomplete.clearbit.com/v1/companies/suggest?query=' + encodeURIComponent(name))
+        .then(function (r) { return r.ok ? r.json() : []; })
+        .then(function (list) { cb((list && list[0] && list[0].domain) || null); })
+        .catch(function () { cb(null); });
+}
+// Concurrency-limited queue so rendering many cards at once doesn't burst the
+// logo services; results are cached and same-name requests are de-duplicated.
+var _uniQ = [], _uniActive = 0, _uniWaiting = {}, UNI_MAX_CONC = 4;
+function _uniPump() {
+    while (_uniActive < UNI_MAX_CONC && _uniQ.length) {
+        var job = _uniQ.shift(); _uniActive++;
+        job(function () { _uniActive--; _uniPump(); });
+    }
+}
+function resolveUniLogo(name, dom, cb) {
+    if (_uniLogoUrl[name] !== undefined) { cb(_uniLogoUrl[name] || null); return; }
+    if (_uniWaiting[name]) { _uniWaiting[name].push(cb); return; }
+    _uniWaiting[name] = [cb];
+    _uniQ.push(function (done) {
+        var finish = function (url, sessionOnly) {
+            rememberUniLogo(name, url, sessionOnly);
+            var cbs = _uniWaiting[name] || []; delete _uniWaiting[name];
+            cbs.forEach(function (f) { try { f(url || null); } catch (e) {} });
+            done();
+        };
+        wikiLogoByName(name, function (wiki, failed) {
+            if (wiki) { finish(wiki); return; }
+            if (dom) { finish(siteIconUrl(dom), failed); return; }
+            clearbitDomainByName(name, function (d) { finish(d ? siteIconUrl(d) : null, failed); });
+        });
+    });
+    _uniPump();
+}
+function uniLogo(u, size) {
+    var style = 'width:' + size + 'px;height:' + size + 'px';
+    return '<span class="crs__logo crs__logo--img crs__logo--uni crs__logo--pending"' +
+        ' data-uni="' + uEsc(u.name) + '" data-dom="' + uEsc(uniDomain(u) || '') + '"' +
+        ' data-mono="' + uEsc(u.abbr || '?') + '" data-c="' + u.color + '" style="' + style + '">' +
+        '<img alt="' + uEsc(u.name) + ' logo" loading="lazy"></span>';
+}
+function uniMonogram(s, img) {
+    if (img) img.remove();
+    s.classList.remove('crs__logo--img', 'crs__logo--pending', 'crs__logo--uni'); s.classList.add('crs__logo--mono');
+    s.style.background = s.getAttribute('data-c') || '#6c3fb0';
+    s.textContent = s.getAttribute('data-mono') || '?';
+}
+// Fill any pending logos (compare modal + every card across the app).
+function cmpHydrateLogos(root) {
+    try {
+        var nodes = (root || document).querySelectorAll('.crs__logo--pending');
+        for (var i = 0; i < nodes.length; i++) (function (s) {
+            s.classList.remove('crs__logo--pending');
+            var img = s.querySelector('img'); if (!img) return;
+            var name = s.getAttribute('data-uni'), dom = s.getAttribute('data-dom') || null;
+            // A crest that won't load (or a placeholder letter tile) falls through
+            // Wikipedia → site icon → DuckDuckGo icon → monogram.
+            var next = function (keep) {
+                var chain = dom ? [siteIconUrl(dom), ddgIconUrl(dom)] : [], nxt = chain[chain.indexOf(img.getAttribute('src') || '') + 1];
+                if (nxt) { rememberUniLogo(name, nxt, !keep); window.setLogoSrc(img, nxt); }
+                else { rememberUniLogo(name, null); uniMonogram(s, img); }
+            };
+            img.onerror = function () { next(false); };
+            img.onload = function () { if (window.isIconPlaceholder(img)) next(true); };
+            resolveUniLogo(name, dom, function (url) { if (url) window.setLogoSrc(img, url); else uniMonogram(s, img); });
+        }(nodes[i]));
+    } catch (e) { /* logos are cosmetic — never let them break the page */ }
+}
+// Auto-hydrate logos rendered anywhere in the app (Explore, Overview, Show all…),
+// debounced to once per frame. Fully guarded and deferred so it can never
+// interfere with the initial page render.
+(function () {
+    try {
+        if (typeof MutationObserver === 'undefined') return;
+        var queued = false;
+        function flush() { queued = false; try { if (document.querySelector('.crs__logo--pending')) cmpHydrateLogos(document); } catch (e) {} }
+        var obs = new MutationObserver(function () { if (!queued) { queued = true; requestAnimationFrame(flush); } });
+        function start() { try { if (document.body) { obs.observe(document.body, { childList: true, subtree: true }); flush(); } } catch (e) {} }
+        // let the app finish its first paint/wiring before we start watching
+        setTimeout(function () {
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { setTimeout(start, 400); });
+            else start();
+        }, 600);
+    } catch (e) {}
+}());
+function coRecruit(c) { return Math.max(20, Math.min(99, Math.round(((c.pre || 0) * 0.6 + (c.sel || 0) * 0.4) * 100))); }
+function coAcceptNum(c) { return Math.max(0.3, Math.pow(1 - (c.sel || 0), 2) * 40); }
+function coAccept(c) { var a = coAcceptNum(c); return (a < 10 ? a.toFixed(1) : Math.round(a)) + '%'; }
+function coSalaryNum(c) {
+    var m = String(c.salary || '').replace(/,/g, '').match(/([\d.]+)\s*([kKbBmM])?/);
+    if (!m) return 0;
+    var n = parseFloat(m[1]); var u = (m[2] || 'k').toLowerCase();
+    return u === 'b' ? n * 1e6 : u === 'm' ? n * 1e3 : n;   // normalise to $k
+}
+function coWord(v, hi, mid) { return v >= hi ? 'Excellent' : v >= mid ? 'Strong' : 'Good'; }
+function coCampus(c) { var p = c.pre || 0; return p >= 0.8 ? 'Excellent' : p >= 0.6 ? 'Strong' : p >= 0.4 ? 'Selective' : 'Broad'; }
+function coWLB(c) {
+    var f = coFacts(c); if (f.wlb != null) return f.wlb;
+    var s = (c.sector || '').toLowerCase();
+    var base = /bank|consult|hedge|invest/.test(s) ? 5.6 : /semic|manufact|memory/.test(s) ? 6.8 : 7.8;
+    return +(base + ((c.pre || 0.6) - 0.6) * 0.5).toFixed(1);
+}
+function coSat(c) { var f = coFacts(c); if (f.sat != null) return f.sat; return +(3.7 + (c.pre || 0) * 0.6).toFixed(1); }
+function coRemote(c) { var f = coFacts(c); if (f.remote) return f.remote; return /bank|consult|hedge/.test((c.sector || '').toLowerCase()) ? 'On-site' : 'Hybrid'; }
+function coPromo(c) { var f = coFacts(c); if (f.promo) return f.promo; return (c.sel || 0) >= 0.8 ? 'Fast' : (c.sel || 0) >= 0.5 ? 'Medium' : 'Steady'; }
+function coStock(c) { return /tech|ai|semic|software|cloud|internet|electron/.test((c.sector || '').toLowerCase()) ? 'Yes (RSUs)' : /bank|hedge|invest/.test((c.sector || '').toLowerCase()) ? 'Deferred / bonus' : 'Sometimes'; }
+function coSignon(c) { return (c.pre || 0) >= 0.6 ? 'Yes' : 'Varies'; }
+var CHECK = '<i class="fa-solid fa-circle-check covs__yes"></i>';
+
+var CO_SECTIONS = [
+    { emoji: '📊', title: 'Overview', rows: [
+        { icon: 'fa-bullseye',       label: 'Recruitment Match', val: function (c) { return coRecruit(c) + '%'; }, num: coRecruit, dir: 'high' },
+        { icon: 'fa-sack-dollar',    label: 'Graduate Salary',   val: function (c) { return c.salary || '—'; }, num: coSalaryNum, dir: 'high' },
+        { icon: 'fa-door-open',      label: 'Acceptance Rate',   val: coAccept, num: coAcceptNum, dir: 'low' },
+        { icon: 'fa-users',          label: 'Company Size',      val: function (c) { return coFacts(c).employees || '—'; } },
+        { icon: 'fa-location-dot',   label: 'Offices',           val: function (c) { return coFacts(c).offices || '—'; } }
+    ]},
+    { emoji: '🎓', title: 'Recruitment', rows: [
+        { icon: 'fa-building-columns', label: 'Target Universities', val: function (c) { return (c.unis && c.unis.length) ? CHECK : '—'; } },
+        { icon: 'fa-graduation-cap',   label: 'Campus Recruiting',   val: coCampus },
+        { icon: 'fa-user-graduate',    label: 'Graduate Programme',  val: function () { return CHECK; } },
+        { icon: 'fa-briefcase',        label: 'Internship Programme',val: function () { return CHECK; } },
+        { icon: 'fa-calendar-check',   label: 'Placement Year',      val: function (c) { return (c.pre || 0) >= 0.3 ? CHECK : '—'; } }
+    ]},
+    { special: 'subjects', emoji: '📚', title: 'Best Subjects' },
+    { emoji: '💼', title: 'Career', rows: [
+        { icon: 'fa-arrow-trend-up', label: 'Promotion Speed',       val: coPromo },
+        { icon: 'fa-book-open',      label: 'Learning Opportunities',val: function (c) { return coWord(c.pre || 0, 0.7, 0.45); } },
+        { icon: 'fa-shuffle',        label: 'Internal Mobility',     val: function (c) { return coWord(c.pre || 0, 0.6, 0.4); } }
+    ]},
+    { emoji: '❤️', title: 'Work Environment', rows: [
+        { icon: 'fa-scale-balanced', label: 'Work-Life Balance',     val: function (c) { return coWLB(c) + '/10'; }, num: coWLB, dir: 'high' },
+        { icon: 'fa-house-laptop',   label: 'Remote Work',           val: coRemote },
+        { icon: 'fa-face-smile',     label: 'Employee Satisfaction', val: function (c) { return coSat(c) + '/5'; }, num: coSat, dir: 'high' }
+    ]},
+    { emoji: '💰', title: 'Compensation', rows: [
+        { icon: 'fa-money-bill-wave',    label: 'Graduate Salary', val: function (c) { return c.salary || '—'; }, num: coSalaryNum, dir: 'high' },
+        { icon: 'fa-gift',               label: 'Bonus',           val: function () { return CHECK; } },
+        { icon: 'fa-chart-line',         label: 'Stock / Equity',  val: coStock },
+        { icon: 'fa-hand-holding-dollar',label: 'Sign-on Bonus',   val: coSignon }
+    ]},
+    { emoji: '🌍', title: 'Company', rows: [
+        { icon: 'fa-flag',                label: 'Founded',      val: function (c) { return coFacts(c).founded || '—'; } },
+        { icon: 'fa-user-tie',            label: 'CEO',          val: function (c) { return coFacts(c).ceo || '—'; } },
+        { icon: 'fa-users',               label: 'Employees',    val: function (c) { return coFacts(c).employees || '—'; } },
+        { icon: 'fa-coins',               label: 'Revenue',      val: function (c) { return coFacts(c).revenue || '—'; } },
+        { icon: 'fa-arrow-up-right-dots', label: 'Market Cap',   val: function (c) { return coFacts(c).mcap || '—'; } },
+        { icon: 'fa-location-dot',        label: 'Headquarters', val: function (c) { return [c.city, c.country].filter(Boolean).join(', ') || '—'; } }
+    ]}
+];
+
+var coSelected = { A: null, B: null };
+function coList() { return (window.CAREERS && window.CAREERS.companies) || []; }
+
+function coBuildSuggest(query, resultEl, slot) {
+    if (!query) { resultEl.innerHTML = ''; return; }
+    var q = query.toLowerCase();
+    var hits = coList().filter(function (c) {
+        return (c.name + ' ' + (c.sector || '') + ' ' + (c.country || '')).toLowerCase().indexOf(q) !== -1;
+    }).slice(0, 7);
+    if (!hits.length) { resultEl.innerHTML = '<div class="cmp__vs__no__match">No companies found for "' + query + '"</div>'; return; }
+    resultEl.innerHTML = hits.map(function (c) {
+        return '<div class="cmp__vs__suggest" data-co="' + esc(c.name) + '">' +
+            '<span class="cmp__vs__suggest__logo">' + coLogo(c, 30) + '</span>' +
+            '<div class="cmp__vs__suggest__info">' +
+                '<div class="cmp__vs__suggest__name">' + esc(coName(c)) + '</div>' +
+                '<div class="cmp__vs__suggest__meta"><span class="mp__badge mp__badge--city">' + esc(c.sector || '') + '</span></div>' +
+            '</div>' +
+        '</div>';
+    }).join('');
+    resultEl.querySelectorAll('.cmp__vs__suggest').forEach(function (el) {
+        el.addEventListener('click', function () {
+            var c = coList().filter(function (x) { return x.name === el.dataset.co; })[0];
+            if (c) coSelect(slot, c);
+        });
+    });
+    function esc(s) { return String(s).replace(/"/g, '&quot;'); }
+}
+
+function coSelect(slot, c) {
+    coSelected[slot] = c;
+    var searchEl = document.getElementById('coSearch' + slot);
+    var resultsEl = document.getElementById('coResults' + slot);
+    var selectedEl = document.getElementById('coSelected' + slot);
+    if (searchEl) searchEl.value = '';
+    if (resultsEl) resultsEl.innerHTML = '';
+    selectedEl.style.display = 'block';
+    selectedEl.innerHTML =
+        '<div class="cmp__vs__sel__card cmp__vs__sel__card--in" style="border-color:' + c.color + '">' +
+            '<span class="cmp__vs__sel__logo">' + coLogo(c, 34) + '</span>' +
+            '<div class="cmp__vs__sel__info">' +
+                '<div class="cmp__vs__sel__name">' + coName(c) + '</div>' +
+                '<div class="cmp__vs__sel__meta"><span class="mp__badge mp__badge--city">' + (c.sector || '') + '</span></div>' +
+            '</div>' +
+            '<button class="cmp__vs__clear__btn" title="Remove"><i class="fa-solid fa-xmark"></i></button>' +
+        '</div>';
+    selectedEl.querySelector('.cmp__vs__clear__btn').addEventListener('click', function () {
+        var card = selectedEl.querySelector('.cmp__vs__sel__card');
+        if (card) card.classList.add('cmp__vs__sel__card--out');
+        setTimeout(function () {
+            coSelected[slot] = null;
+            selectedEl.style.display = 'none';
+            selectedEl.innerHTML = '';
+            renderCoComparison();
+        }, 200);
+    });
+    renderCoComparison();
+}
+
+function coHeadCard(c, key) {
+    return '<div class="covs__hd__co covs__col--' + key + '">' +
+        '<span class="covs__hd__logo">' + coLogo(c, 40) + '</span>' +
+        '<div class="covs__hd__name" style="color:' + c.color + '">' + coName(c) + '</div>' +
+    '</div>';
+}
+function renderCoComparison() {
+    var a = coSelected.A, b = coSelected.B;
+    var result = document.getElementById('coVsResult');
+    var empty = document.getElementById('coVsEmpty');
+    if (!result || !empty) return;
+    if (!a || !b) { result.style.display = 'none'; result.innerHTML = ''; empty.style.display = 'flex'; cmpSetVerdict(''); return; }
+    empty.style.display = 'none';
+    result.style.display = 'block';
+
+    var header =
+        '<div class="covs__hd">' +
+            '<div class="covs__hd__spacer"></div>' +
+            coHeadCard(a, 'a') +
+            coHeadCard(b, 'b') +
+        '</div>';
+
+    var body = CO_SECTIONS.map(function (sec) {
+        if (sec.special === 'subjects') {
+            function chips(c) {
+                return (c.degrees || []).slice(0, 6).map(function (d) {
+                    return '<span class="covs__chip" style="--cc:' + c.color + '">' + d + '</span>';
+                }).join('') || '<span class="covs__chip covs__chip--none">—</span>';
+            }
+            return '<div class="covs__sec">' +
+                '<div class="covs__sec__t"><span class="covs__sec__emoji">' + sec.emoji + '</span> ' + sec.title + '</div>' +
+                '<div class="covs__subj">' +
+                    '<div class="covs__subj__col"><div class="covs__subj__co" style="color:' + a.color + '">' + a.name + '</div><div class="covs__subj__chips">' + chips(a) + '</div></div>' +
+                    '<div class="covs__subj__col"><div class="covs__subj__co" style="color:' + b.color + '">' + b.name + '</div><div class="covs__subj__chips">' + chips(b) + '</div></div>' +
+                '</div>' +
+            '</div>';
+        }
+        var rows = sec.rows.map(function (r) {
+            var va = r.val(a), vb = r.val(b), wa = '', wb = '';
+            if (r.num) {
+                var na = r.num(a), nb = r.num(b);
+                if (na !== nb) { var aWins = r.dir === 'low' ? na < nb : na > nb; wa = aWins ? ' is-win' : ''; wb = aWins ? '' : ' is-win'; }
+            }
+            return '<div class="covs__row">' +
+                '<div class="covs__row__lbl"><i class="fa-solid ' + r.icon + '"></i>' + r.label + '</div>' +
+                '<div class="covs__row__v covs__col--a' + wa + '">' + va + '</div>' +
+                '<div class="covs__row__v covs__col--b' + wb + '">' + vb + '</div>' +
+            '</div>';
+        }).join('');
+        return '<div class="covs__sec">' +
+            '<div class="covs__sec__t"><span class="covs__sec__emoji">' + sec.emoji + '</span> ' + sec.title + '</div>' +
+            '<div class="covs__rows">' + rows + '</div>' +
+        '</div>';
+    }).join('');
+
+    result.innerHTML = header +
+        '<div class="covs__grid">' + body + '</div>' +
+        '<p class="covs__note"><i class="fa-solid fa-circle-info"></i> Figures blend real company data with curated estimates for graduate guidance — not a guarantee.</p>';
+
+    cmpSetVerdict(coVerdict(a, b));
+}
+
+/* ── Verdict / conclusion (max 2 short sentences, names in the entity's colour) ── */
+function cmpSetVerdict(html) {
+    var el = document.getElementById('cmpVerdict');
+    if (!el) return;
+    if (!html) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.innerHTML = html;
+    el.style.display = 'block';
+    el.classList.remove('cmp__verdict--in'); void el.offsetWidth; el.classList.add('cmp__verdict--in');
+    cmpHydrateLogos(el);
+}
+function buildVerdict(a, b, metrics) {
+    var aw = [], bw = [];
+    metrics.forEach(function (m) {
+        if (m.a == null || m.b == null || m.a === m.b) return;
+        var aWins = m.dir === 'low' ? m.a < m.b : m.a > m.b;
+        (aWins ? aw : bw).push(m.name);
+    });
+    function nm(o) { return '<span class="cmp__verdict__ent" title="' + (o.name || '') + '">' + (o.logo || ('<b class="cmp__verdict__name" style="color:' + o.color + '">' + o.name + '</b>')) + '</span>'; }
+    if (!aw.length && !bw.length) {
+        return '<span class="cmp__verdict__txt">' + nm(a) + ' and ' + nm(b) + ' are remarkably close across every measure.</span>';
+    }
+    function joinList(arr) { arr = arr.slice(0, 3); return arr.length <= 1 ? (arr[0] || '') : arr.slice(0, -1).join(', ') + ' and ' + arr[arr.length - 1]; }
+    var lead = aw.length >= bw.length ? { o: a, w: aw, other: b, ow: bw } : { o: b, w: bw, other: a, ow: aw };
+    var s1 = nm(lead.o) + ' comes out ahead — stronger on ' + joinList(lead.w) + '.';
+    var s2 = lead.ow.length ? ' ' + nm(lead.other) + ' leads on ' + joinList(lead.ow.slice(0, 2)) + '.' : '';
+    return '<span class="cmp__verdict__txt">' + s1 + s2 + '</span>';
+}
+function coVerdict(a, b) {
+    var A = { name: coName(a), color: a.color, logo: coLogo(a, 26) }, B = { name: coName(b), color: b.color, logo: coLogo(b, 26) };
+    return buildVerdict(A, B, [
+        { name: 'recruitment match', a: coRecruit(a), b: coRecruit(b), dir: 'high' },
+        { name: 'graduate pay',      a: coSalaryNum(a), b: coSalaryNum(b), dir: 'high' },
+        { name: 'selectivity',       a: coAcceptNum(a), b: coAcceptNum(b), dir: 'low' },
+        { name: 'work-life balance', a: coWLB(a), b: coWLB(b), dir: 'high' },
+        { name: 'employee satisfaction', a: coSat(a), b: coSat(b), dir: 'high' }
+    ]);
+}
+function uniStudentsNum(u) { var m = String(u.students || '').replace(/[, ]/g, '').match(/(\d+)/); return m ? +m[1] : null; }
+function uniTuitionNum(u) { return (typeof tuitionMinCost === 'function' ? tuitionMinCost(u) : 0) || null; }
+function uniVerdict(a, b) {
+    var A = { name: a.name, color: a.color, logo: uniLogo(a, 26) }, B = { name: b.name, color: b.color, logo: uniLogo(b, 26) };
+    return buildVerdict(A, B, [
+        { name: 'academic selectivity', a: a.diff || null, b: b.diff || null, dir: 'high' },
+        { name: 'value for money',       a: uniTuitionNum(a), b: uniTuitionNum(b), dir: 'low' },
+        { name: 'campus size',           a: uniStudentsNum(a), b: uniStudentsNum(b), dir: 'high' }
+    ]);
+}
+
+// Company search inputs
+(function () {
+    var sa = document.getElementById('coSearchA'), sb = document.getElementById('coSearchB');
+    if (sa) sa.addEventListener('input', function () { coBuildSuggest(this.value.trim(), document.getElementById('coResultsA'), 'A'); });
+    if (sb) sb.addEventListener('input', function () { coBuildSuggest(this.value.trim(), document.getElementById('coResultsB'), 'B'); });
+}());
+
+// Compare-modal tab switching (Universities ⇄ Companies)
+(function () {
+    var tabs = document.querySelectorAll('.cmp__tab');
+    var pageUni = document.getElementById('cmpPageUni');
+    var pageCo = document.getElementById('cmpPageCo');
+    var slider = document.getElementById('cmpTabsSlider');
+    var subEl = document.querySelector('.cmp__vs__hd__sub');
+    function place(tab) { if (slider && tab) { slider.style.width = tab.offsetWidth + 'px'; slider.style.transform = 'translateX(' + tab.offsetLeft + 'px)'; } }
+    function activate(which) {
+        tabs.forEach(function (t) { t.classList.toggle('is-active', t.dataset.cmptab === which); if (t.dataset.cmptab === which) place(t); });
+        var show = which === 'co' ? pageCo : pageUni;
+        var hide = which === 'co' ? pageUni : pageCo;
+        if (hide) hide.style.display = 'none';
+        if (show) { show.style.display = 'block'; show.classList.remove('cmp__page--in'); void show.offsetWidth; show.classList.add('cmp__page--in'); }
+        if (subEl) subEl.textContent = which === 'co'
+            ? 'Compare two companies on recruitment, pay, culture & more'
+            : 'Select two universities and pick the metrics you want to compare';
+        // reflect the active tab's verdict (or hide it)
+        if (which === 'co') { (coSelected.A && coSelected.B) ? cmpSetVerdict(coVerdict(coSelected.A, coSelected.B)) : cmpSetVerdict(''); }
+        else { (cmpVsSelected.A && cmpVsSelected.B) ? cmpSetVerdict(uniVerdict(cmpVsSelected.A, cmpVsSelected.B)) : cmpSetVerdict(''); }
+    }
+    tabs.forEach(function (t) { t.addEventListener('click', function () { activate(t.dataset.cmptab); }); });
+    window.__cmpActivateTab = activate;
+    window.__cmpPlaceTab = function () { var a = document.querySelector('.cmp__tab.is-active'); if (a) place(a); };
+}());
+
+// Wipe both comparisons clean when the modal is closed, so it always reopens fresh.
+function cmpResetAll() {
+    cmpVsSelected = { A: null, B: null };
+    coSelected = { A: null, B: null };
+    ['A', 'B'].forEach(function (slot) {
+        ['cmpSelected', 'coSelected', 'cmpResults', 'coResults'].forEach(function (pre) {
+            var el = document.getElementById(pre + slot);
+            if (el) { el.innerHTML = ''; el.style.display = (pre.indexOf('Selected') !== -1 ? 'none' : ''); }
+        });
+        ['cmpSearch', 'coSearch'].forEach(function (pre) { var s = document.getElementById(pre + slot); if (s) s.value = ''; });
+    });
+    var t = document.getElementById('cmpVsTable'); if (t) { t.style.display = 'none'; t.innerHTML = ''; }
+    var e = document.getElementById('cmpVsEmpty'); if (e) e.style.display = 'flex';
+    var cr = document.getElementById('coVsResult'); if (cr) { cr.style.display = 'none'; cr.innerHTML = ''; }
+    var ce = document.getElementById('coVsEmpty'); if (ce) ce.style.display = 'flex';
+    _lastCmpPairKey = '';
+    cmpSetVerdict('');
+    if (typeof window.__cmpActivateTab === 'function') window.__cmpActivateTab('uni');
+}
 
 // ---- Per-slot country selection for head-to-head comparison ----
 function cmpSetSlotCountry(slot, code) {
@@ -2866,59 +3901,132 @@ var CAT_STYLES = {
     tuition:    { color:'#8e44ad', bg:'rgba(142,68,173,.1)',  icon:'fa-solid fa-euro-sign' },
     ranking:    { color:'#d97c14', bg:'rgba(217,124,20,.1)',  icon:'fa-solid fa-trophy' },
     programme:  { color:'#16a085', bg:'rgba(22,160,133,.1)',  icon:'fa-solid fa-book-open' },
+    news:       { color:'#5b6070', bg:'rgba(91,96,112,.1)',   icon:'fa-solid fa-newspaper' },
 };
 
-function renderUpdatesFeed() {
+// ── Real per-saved-university news in the Feed sidebar ──────────────────────
+// Pulls the SAME curated items the email digest sends (from /api/uni-news for the
+// user's CURRENT saved universities), de-duplicates them, and keeps them forever
+// with the date+time each was first seen. Only genuinely NEW items are ever added.
+var FEED_STORE_KEY = 'us_feed_store_' + user.id;
+var FEED_FETCH_KEY = 'us_feed_fetch_' + user.id;
+function getFeedStore() { try { return JSON.parse(localStorage.getItem(FEED_STORE_KEY) || '{}'); } catch (e) { return {}; } }
+function setFeedStore(s) { try { localStorage.setItem(FEED_STORE_KEY, JSON.stringify(s)); } catch (e) {} }
+function feedHash(str) { var h = 0, i, c; str = String(str || ''); for (i = 0; i < str.length; i++) { c = str.charCodeAt(i); h = ((h << 5) - h) + c; h |= 0; } return Math.abs(h).toString(36); }
+function feedItemKey(uniId, it) { return uniId + '|' + feedHash((it.blurb || it.title || '').toLowerCase()); }
+var FEED_TYPE_MAP = { deadline: { cat: 'deadline', label: 'Deadline' }, event: { cat: 'openday', label: 'Event' }, news: { cat: 'news', label: 'News' } };
+
+function paintFeed() {
     var saved   = getSaved();
     var feedEl  = document.getElementById('feedList');
     var emptyEl = document.getElementById('feedEmpty');
     var dotEl   = document.getElementById('feedDot');
     if (!feedEl) return;
+    var store = getFeedStore();
+    var items = Object.keys(store).map(function (k) { return store[k]; })
+        .filter(function (it) { return saved.indexOf(it.uniId) !== -1; })
+        .sort(function (a, b) { return b.firstSeen - a.firstSeen; });
 
-    var updates = FEED_UPDATES.filter(function(u) { return saved.indexOf(u.uniId) !== -1; });
-
-    if (!updates.length) {
-        if (emptyEl) emptyEl.style.display = 'flex';
-        feedEl.querySelectorAll('.mp__feed__item').forEach(function(el){ el.remove(); });
-        if (dotEl) dotEl.style.display = 'none';
-        return;
-    }
-
+    feedEl.querySelectorAll('.mp__feed__item, .mp__feed__day').forEach(function (el) { el.remove(); });
+    var sub = document.getElementById('feedSub');
+    if (sub) sub.textContent = saved.length ? 'Updates from ' + saved.length + ' saved universit' + (saved.length === 1 ? 'y' : 'ies') : 'Updates from the universities you saved';
+    if (!items.length) { if (emptyEl) emptyEl.style.display = 'flex'; if (dotEl) dotEl.style.display = 'none'; updateHeroFeed(); return; }
     if (emptyEl) emptyEl.style.display = 'none';
+
     var readIds = getNewsRead();
-    var hasUnread = FEED_UPDATES.some(function(u, i) {
-        if (saved.indexOf(u.uniId) === -1) return false;
-        return parseDaysAgo(u.date) < 2 && readIds.indexOf(getFeedItemId(u, i)) === -1;
-    });
+    var isNew = function (it) { return readIds.indexOf(it.id) === -1 && (Date.now() - it.firstSeen) < 3 * 86400000; };
+    var hasUnread = items.some(isNew);
     if (dotEl) dotEl.style.display = hasUnread ? 'flex' : 'none';
 
-    feedEl.querySelectorAll('.mp__feed__item').forEach(function(el){ el.remove(); });
-
-    updates.forEach(function(u, i) {
-        var uni = UNI.find(function(x){ return x.id === u.uniId; });
-        if (!uni) return;
-        var cs  = CAT_STYLES[u.cat] || CAT_STYLES.programme;
-        var item = document.createElement('div');
-        item.className = 'mp__feed__item';
-        item.style.animationDelay = (i * 0.04) + 's';
-        item.innerHTML =
-            '<div class="mp__feed__avatar" style="background:' + uni.color + '">' + uni.abbr.slice(0,3) + '</div>' +
+    function fEsc(v) { return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+    // A quiet timeline: items grouped by the day they arrived, each with the university's crest.
+    var dayFmt = new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
+    var timeFmt = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' });
+    function dayLabel(ts) {
+        var d = new Date(ts), t = new Date(); t.setHours(0, 0, 0, 0);
+        var diff = Math.round((t - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+        return diff <= 0 ? 'Today' : diff === 1 ? 'Yesterday' : dayFmt.format(d);
+    }
+    var lastDay = '';
+    items.forEach(function (it, i) {
+        var uni = UNI.find(function (x) { return x.id === it.uniId; });
+        var cs  = CAT_STYLES[it.cat] || CAT_STYLES.news;
+        var day = dayLabel(it.firstSeen);
+        if (day !== lastDay) {
+            lastDay = day;
+            var h = document.createElement('div');
+            h.className = 'mp__feed__day';
+            h.textContent = day;
+            if (emptyEl) feedEl.insertBefore(h, emptyEl); else feedEl.appendChild(h);
+        }
+        var el = document.createElement('article');
+        el.className = 'mp__feed__item' + (isNew(it) ? ' is-new' : '');
+        el.style.setProperty('--i', Math.min(i, 14));
+        el.style.setProperty('--cc', cs.color);
+        el.innerHTML =
+            '<span class="mp__feed__crest">' + (uni ? uniLogo(uni, 26) : '<span class="crs__logo crs__logo--mono" style="width:26px;height:26px;background:#888">?</span>') + '</span>' +
             '<div class="mp__feed__body">' +
                 '<div class="mp__feed__top">' +
-                    '<span class="mp__feed__badge" style="background:' + cs.bg + ';color:' + cs.color + '">' +
-                        '<i class="' + cs.icon + '"></i> ' + u.label +
-                    '</span>' +
-                    '<span class="mp__feed__date">' + u.date + '</span>' +
+                    '<b class="mp__feed__uni">' + fEsc((uni && (uni.abbr && uni.name.length > 26 ? uni.abbr : uni.name)) || it.name || '') + '</b>' +
+                    '<span class="mp__feed__cat">' + fEsc(it.label || 'News') + '</span>' +
+                    '<time class="mp__feed__time">' + timeFmt.format(new Date(it.firstSeen)) + '</time>' +
                 '</div>' +
-                '<div class="mp__feed__uni">' + uni.name + '</div>' +
-                '<p class="mp__feed__text">' + u.text + '</p>' +
+                '<p class="mp__feed__text">' + fEsc(it.blurb || '') + '</p>' +
+                (it.url ? '<a href="' + fEsc(it.url) + '" target="_blank" rel="noopener" class="mp__feed__link">Read story <i class="fa-solid fa-arrow-right"></i></a>' : '') +
             '</div>';
-        if (emptyEl) feedEl.insertBefore(item, emptyEl);
-        else feedEl.appendChild(item);
+        if (emptyEl) feedEl.insertBefore(el, emptyEl); else feedEl.appendChild(el);
     });
-
+    cmpHydrateLogos(feedEl);
     updateHeroFeed();
 }
+
+var _feedFetching = false;
+function fetchFeedNews(force) {
+    var saved = getSaved();
+    var names = UNI.filter(function (u) { return saved.indexOf(u.id) !== -1; }).map(function (u) { return u.name; });
+    if (!names.length) { paintFeed(); return; }
+    var store = getFeedStore(), have = {};
+    Object.keys(store).forEach(function (k) { have[store[k].uniId] = 1; });
+    // a university checked recently counts as "had", even when it simply has no news —
+    // otherwise one quiet university forced a request on every page load
+    var checked = {}; try { checked = JSON.parse(localStorage.getItem(FEED_FETCH_KEY + '_unis') || '{}'); } catch (e) {}
+    var missing = UNI.filter(function (u) { return saved.indexOf(u.id) !== -1 && !have[u.id] && !(Date.now() - (checked[u.id] || 0) < 6 * 3600000); }).length;
+    var lastFetch = parseInt(localStorage.getItem(FEED_FETCH_KEY) || '0', 10);
+    var need = force || missing > 0 || (Date.now() - lastFetch) > 30 * 60000;
+    paintFeed();                                   // show what we already have, instantly
+    if (!need || _feedFetching) return;
+    _feedFetching = true;
+    var base = (typeof PAY_API_BASE !== 'undefined' && PAY_API_BASE) ? PAY_API_BASE : '';
+    fetch(base + '/api/uni-news?unis=' + encodeURIComponent(names.join(','))).then(function (r) { return r.json(); }).then(function (d) {
+        _feedFetching = false;
+        localStorage.setItem(FEED_FETCH_KEY, String(Date.now()));
+        try { var ck = JSON.parse(localStorage.getItem(FEED_FETCH_KEY + '_unis') || '{}'); UNI.forEach(function (u) { if (saved.indexOf(u.id) !== -1) ck[u.id] = Date.now(); }); localStorage.setItem(FEED_FETCH_KEY + '_unis', JSON.stringify(ck)); } catch (e) {}
+        var news = (d && d.news) || {}, st = getFeedStore(), added = 0, urls = {};
+        Object.keys(st).forEach(function (k) { if (st[k].url) urls[st[k].url] = 1; });
+        Object.keys(news).forEach(function (name) {
+            var uni = UNI.find(function (x) { return x.name === name; });
+            var uniId = uni ? uni.id : name;
+            (news[name] || []).forEach(function (it) {
+                var key = feedItemKey(uniId, it);
+                if (st[key] || (it.url && urls[it.url])) return;   // dedupe — never re-add the same story
+                var tm = FEED_TYPE_MAP[it.type] || FEED_TYPE_MAP.news;
+                // the server's "found" time, so the timeline matches on every device
+                st[key] = { id: key, uniId: uniId, name: name, blurb: it.blurb || it.title || '', url: it.url || '', cat: tm.cat, label: tm.label, firstSeen: Math.min(it.found || Date.now(), Date.now()), published: it.published || null };
+                if (it.url) urls[it.url] = 1;
+                added++;
+            });
+        });
+        if (added) setFeedStore(st);
+        paintFeed();
+    }).catch(function () { _feedFetching = false; paintFeed(); });
+}
+
+// Public entry (kept the old name so all existing callers keep working).
+function renderUpdatesFeed() { fetchFeedNews(false); }
+// The server keeps these fresh in the background; while the page stays open,
+// look again every half hour so the bell lights up without opening the feed.
+setInterval(function () { if (!document.hidden) fetchFeedNews(false); }, 30 * 60000);
+document.addEventListener('visibilitychange', function () { if (!document.hidden) fetchFeedNews(false); });
 
 var feedOpen = false;
 function openFeed()  {
@@ -2939,6 +4047,9 @@ function closeFeed() {
         var id = getFeedItemId(u, i);
         if (readIds.indexOf(id) === -1) readIds.push(id);
     });
+    // everything shown in the feed counts as read once it's been open
+    var store = getFeedStore();
+    Object.keys(store).forEach(function (k) { if (saved.indexOf(store[k].uniId) !== -1 && readIds.indexOf(k) === -1) readIds.push(k); });
     setNewsRead(readIds);
     updateHeroFeed();
     var dot = document.getElementById('feedDot');
@@ -2947,6 +4058,10 @@ function closeFeed() {
 document.getElementById('feedToggle').addEventListener('click', function() { feedOpen ? closeFeed() : openFeed(); });
 document.getElementById('feedClose').addEventListener('click', closeFeed);
 document.getElementById('feedOverlay').addEventListener('click', closeFeed);
+document.addEventListener('keydown', function (e) {
+    var nm = document.getElementById('newsModal');
+    if (e.key === 'Escape' && feedOpen && !(nm && nm.classList.contains('open'))) closeFeed();
+});
 
 setTimeout(renderUpdatesFeed, 0);
 
@@ -3099,6 +4214,7 @@ function applyCountryData(code, data, gen) {
 
         UNI = data.universities.concat(getCustomUnisForCountry(code));
         registerUnis(UNI);   // remember these unis so cross-country lookups (e.g. Gradebook targets) resolve
+        if (typeof scheduleDigestSync === 'function') scheduleDigestSync();   // names resolvable now
 
         var flagWrap = document.getElementById('headerFlagWrap');
         var flagEl   = document.getElementById('headerFlag');
@@ -3115,10 +4231,7 @@ function applyCountryData(code, data, gen) {
         document.querySelectorAll('.mp__cs__country').forEach(function(btn) {
             btn.classList.toggle('active', btn.dataset.code === code);
         });
-        var _csPicker = document.getElementById('csPicker');
-        if (_csPicker) _csPicker.classList.remove('mp__cs__picker--open');
-        csPickerOpen = false;
-        document.getElementById('csChangeBtn').innerHTML = '<i class="fa-solid fa-sliders"></i> Change country';
+        if (window.countryDrawer) window.countryDrawer.close();
 
         var heroSub = document.getElementById('heroSub');
         if (heroSub) heroSub.textContent = 'Explore universities in ' + countryName + ', compare options and track your applications.';
@@ -3340,7 +4453,7 @@ var DEADLINES = [
     { id:'d_app_upf',        uniId:'upf',        uniName:'Universidad Pompeu Fabra',           uniAbbr:'UPF',   uniColor:'#CC2529', type:'application',   title:'International Student Applications Open',    date:'2026-05-30', country:'es' },
     { id:'d_app_ie',         uniId:'ie',         uniName:'IE University',                      uniAbbr:'IE',    uniColor:'#1A1A2E', type:'application',   title:'IE University International Intake 2026',    date:'2026-06-01', country:'es' },
     { id:'d_app_oxford',     uniId:'oxford',     uniName:'University of Oxford',               uniAbbr:'OXF',   uniColor:'#002147', type:'application',   title:'Graduate Applications — Michaelmas 2026',    date:'2026-10-01', country:'gb' },
-    { id:'d_app_ucl',        uniId:'ucl',        uniName:'University College London',          uniAbbr:'UCL',   uniColor:'#500778', type:'application',   title:'UCAS Undergraduate Deadline',                date:'2027-01-29', country:'gb' },
+    { id:'d_app_ucl',        uniId:'ucl',        uniName:'University College London',          uniAbbr:'UCL',   uniColor:'#500778', type:'application',   title:'UCAS Undergraduate Deadline',                date:'2027-01-13', country:'gb' },
     { id:'d_app_cambridge',  uniId:'cambridge',  uniName:'University of Cambridge',            uniAbbr:'CAM',   uniColor:'#003B5C', type:'application',   title:'Undergraduate UCAS Deadline',                date:'2026-10-15', country:'gb' },
     { id:'d_app_manchester',  uniId:'manchester', uniName:'University of Manchester',          uniAbbr:'MAN',   uniColor:'#660099', type:'application',   title:'Postgraduate Applications — Autumn Intake',  date:'2026-07-01', country:'gb' },
     { id:'d_app_lmu',        uniId:'lmu',        uniName:'Ludwig Maximilian Universität',      uniAbbr:'LMU',   uniColor:'#005B99', type:'application',   title:'Winter Semester International Applications',  date:'2026-07-15', country:'de' },
@@ -3357,7 +4470,7 @@ var DEADLINES = [
     { id:'d_sch_upc',        uniId:'upc',        uniName:'Univ. Politècnica de Catalunya',     uniAbbr:'UPC',   uniColor:'#0057A8', type:'scholarship',   title:'PhD Scholarships: Robotics & Automation',     date:'2026-05-10', country:'es' },
     { id:'d_sch_usal',       uniId:'usal',       uniName:'Universidad de Salamanca',           uniAbbr:'USAL',  uniColor:'#A0001E', type:'scholarship',   title:'USAL Global Scholarship — Full Tuition',      date:'2026-06-05', country:'es' },
     { id:'d_sch_uab',        uniId:'uab',        uniName:'Univ. Autónoma de Barcelona',        uniAbbr:'UAB',   uniColor:'#006400', type:'scholarship',   title:'International Excellence Grant',               date:'2026-05-25', country:'es' },
-    { id:'d_sch_cambridge',  uniId:'cambridge',  uniName:'University of Cambridge',            uniAbbr:'CAM',   uniColor:'#003B5C', type:'scholarship',   title:'Gates Cambridge Scholarships 2026',           date:'2026-10-12', country:'gb' },
+    { id:'d_sch_cambridge',  uniId:'cambridge',  uniName:'University of Cambridge',            uniAbbr:'CAM',   uniColor:'#003B5C', type:'scholarship',   title:'Gates Cambridge Scholarship — US round',      date:'2026-10-14', country:'gb' },
     { id:'d_sch_ucl',        uniId:'ucl',        uniName:'University College London',          uniAbbr:'UCL',   uniColor:'#500778', type:'scholarship',   title:'UCL Global Excellence Scholarships — £10k',   date:'2026-06-01', country:'gb' },
     { id:'d_sch_edinburgh',  uniId:'edinburgh',  uniName:'University of Edinburgh',            uniAbbr:'UoE',   uniColor:'#00325F', type:'scholarship',   title:'Edinburgh Global Undergraduate — £6,000',     date:'2027-03-01', country:'gb' },
     { id:'d_sch_lse',        uniId:'lse',        uniName:'London School of Economics',         uniAbbr:'LSE',   uniColor:'#A50034', type:'scholarship',   title:'LSE Graduate Support Scheme',                 date:'2026-05-01', country:'gb' },
@@ -4804,13 +5917,17 @@ function renderCountryGrid() {
     var favs = getFavCountries();
     var empty = document.getElementById('csGridEmpty');
     if (empty) empty.style.display = favs.length ? 'none' : 'block';
-    grid.innerHTML = favs.map(function(code) {
-        var name = countryNameByCode(code);
-        return '<button class="mp__cs__country' + (code === currentCountryCode ? ' active' : '') + '" data-code="' + code + '" data-name="' + name + '">' +
-            '<span class="fi fi-' + code + '"></span>' + name +
+    grid.innerHTML = favs.map(function(code, i) {
+        var name = countryNameByCode(code), on = code === currentCountryCode;
+        return '<button class="mp__cs__country' + (on ? ' active' : '') + '" data-code="' + code + '" data-name="' + name + '" style="--i:' + i + '"' + (on ? ' aria-current="true"' : '') + '>' +
+            '<span class="fi fi-' + code + '"></span>' +
+            '<span class="mp__cs__cname"><b>' + name + '</b><small data-cs-time="' + code + '"></small></span>' +
             '<i class="mp__cs__fav fa-solid fa-heart" data-fav="' + code + '" title="Remove from your countries"></i>' +
         '</button>';
     }).join('');
+    var count = document.getElementById('csdCount');
+    if (count) count.textContent = favs.length ? favs.length : '';
+    if (window.countryDrawer) window.countryDrawer.refresh();
 }
 
 function renderCountrySearch(q) {
@@ -4842,24 +5959,16 @@ function updateCountryPickerMode() {
     if (bottom) bottom.style.display = elite ? 'none' : 'flex';
 }
 
-var csPickerOpen = false;
 (function() {
     var btn = document.getElementById('csChangeBtn');
     var picker = document.getElementById('csPicker');
     if (!btn || !picker) return;
 
+    // "Change country" slides in the destination drawer (overview.js).
     btn.addEventListener('click', function() {
-        csPickerOpen = !csPickerOpen;
-        if (csPickerOpen) {
-            renderCountryGrid();
-            updateCountryPickerMode();
-            picker.classList.add('mp__cs__picker--open');
-        } else {
-            picker.classList.remove('mp__cs__picker--open');
-        }
-        btn.innerHTML = csPickerOpen
-            ? '<i class="fa-solid fa-xmark"></i> Close'
-            : '<i class="fa-solid fa-sliders"></i> Change country';
+        renderCountryGrid();
+        updateCountryPickerMode();
+        if (window.countryDrawer) window.countryDrawer.open(btn);
     });
 
     // Grid: select a country (or heart to remove it from favourites)
@@ -4868,7 +5977,10 @@ var csPickerOpen = false;
         var heart = e.target.closest('.mp__cs__fav');
         if (heart) { e.stopPropagation(); toggleFavCountry(heart.dataset.fav); return; }
         var chip = e.target.closest('.mp__cs__country');
-        if (chip) loadCountry(chip.dataset.code);
+        if (!chip) return;
+        if (chip.dataset.code === currentCountryCode) { if (window.countryDrawer) window.countryDrawer.close(); return; }
+        chip.classList.add('is-picking');
+        loadCountry(chip.dataset.code);
     });
 
     // Elite search input
@@ -4901,22 +6013,217 @@ var csPickerOpen = false;
 /* ══════════════ Visa & Logistics guide (curated per country) ══════════════
  * Guidance for a typical non-EU/international student. Estimated & curated —
  * always shown with a "verify with official sources" disclaimer. */
+/* Visa & logistics for international students, per destination country.
+   `funds` = proof-of-means the consulate expects, `docs` = what to gather before
+   you go, `arrive` = what you must do in your first weeks, and the rest covers
+   money, housing, renewals and post-study work. Figures are typical/approximate
+   and change often — the UI always links to the official source. */
 var VISA_DATA = {
-    es: { visa: 'Student Visa (Tipo D)', need: 'EU/EEA: none. Non-EU: required for stays over 90 days', time: '4–8 weeks', cost: '~€80', work: 'Up to 30 hrs/week with a work permit', ins: 'Private health insurance required', post: 'Up to 12 months job-search permit after graduation', gov: 'exteriores.gob.es' },
-    fr: { visa: 'VLS-TS Student Long-Stay Visa', need: 'EU/EEA: none. Non-EU: required for stays over 90 days', time: '2–4 weeks (after Campus France)', cost: '~€99', work: 'Up to 964 hrs/year (~20 hrs/week)', ins: 'Free enrolment in French student health system', post: '12-month APS permit to find work', gov: 'france-visas.gouv.fr' },
-    de: { visa: 'National Visa (Type D) for study', need: 'EU/EEA: none. Non-EU: required', time: '6–12 weeks', cost: '~€75', work: '120 full / 240 half days per year', ins: 'Public/private health insurance mandatory (~€120/mo)', post: '18-month residence permit to seek work', gov: 'germany.info' },
-    it: { visa: 'Student Visa (Type D)', need: 'EU/EEA: none. Non-EU: required over 90 days', time: '3–6 weeks', cost: '~€50', work: 'Up to 20 hrs/week', ins: 'Health insurance required (SSN or private)', post: '12-month job-search permit', gov: 'vistoperitalia.esteri.it' },
-    pt: { visa: 'Student Residence Visa', need: 'EU/EEA: none. Non-EU: required', time: '2–4 weeks', cost: '~€90', work: 'Allowed alongside study', ins: 'Health insurance required', post: 'Job-search residence permit available', gov: 'vistos.mne.gov.pt' },
-    nl: { visa: 'Entry Visa (MVV) + residence permit', need: 'EU/EEA: none. Non-EU: usually required', time: '2–8 weeks (via university)', cost: '~€210', work: 'Up to 16 hrs/week (or full-time summer)', ins: 'Dutch health insurance required if working', post: '1-year "orientation year" (zoekjaar) permit', gov: 'ind.nl' },
-    ie: { visa: 'Irish Study Visa (Type D)', need: 'EU/EEA: none. Non-EU: often required', time: '4–8 weeks', cost: '~€60', work: 'Up to 20 hrs/week (40 in holidays)', ins: 'Private medical insurance required', post: 'Up to 2 years stay-back (Third Level Graduate Scheme)', gov: 'irishimmigration.ie' },
-    be: { visa: 'Student Visa (Type D)', need: 'EU/EEA: none. Non-EU: required over 90 days', time: '4–8 weeks', cost: '~€180', work: 'Up to 20 hrs/week during term', ins: 'Health insurance required', post: '12-month job-search residence permit', gov: 'dofi.ibz.be' },
-    fi: { visa: 'Student Residence Permit', need: 'EU/EEA: register only. Non-EU: required', time: '1–3 months', cost: '~€350', work: 'Up to 30 hrs/week', ins: 'Insurance required (amount depends on study length)', post: '2-year job-search residence permit', gov: 'migri.fi' },
-    gb: { visa: 'Student Visa (formerly Tier 4)', need: 'All international students (incl. EU since 2021)', time: '~3 weeks', cost: '£490 + £776/yr health surcharge', work: 'Up to 20 hrs/week during term', ins: 'NHS access via Immigration Health Surcharge', post: 'Graduate Route: 2 years (3 for PhD)', gov: 'gov.uk/student-visa' },
-    us: { visa: 'F-1 Student Visa', need: 'All international students', time: '3–8 weeks (after I-20 + SEVIS)', cost: '$185 + $350 SEVIS fee', work: 'On-campus only (20 hrs/week); CPT/OPT later', ins: 'Health insurance required (~$1,500–2,500/yr)', post: 'OPT: 12 months (+24 for STEM)', gov: 'travel.state.gov' },
-    ch: { visa: 'National Visa (Type D) for study', need: 'EU/EFTA: permit only. Non-EU: visa required', time: '8–12 weeks', cost: '~CHF 88', work: 'Up to 15 hrs/week during term', ins: 'Swiss health insurance mandatory (~CHF 250/mo)', post: '6-month permit to seek qualified work', gov: 'sem.admin.ch' },
-    ua: { visa: 'Long-term Type D Student Visa', need: 'Most non-CIS international students', time: '2–4 weeks', cost: '~$85', work: 'Restricted — generally not permitted on study visa', ins: 'Medical insurance required', post: 'Must apply separately for work permit', gov: 'mfa.gov.ua' },
-    dk: { visa: 'Student Residence Permit', need: 'EU/Nordic: none. Non-EU: required', time: '1–2 months', cost: '~DKK 1,900', work: 'Up to 20 hrs/week (full-time Jun–Aug)', ins: 'Covered by Danish health system once registered', post: '3-year establishment card to find work', gov: 'nyidanmark.dk' },
-    se: { visa: 'Residence Permit for Studies', need: 'EU/EEA: none. Non-EU: required', time: '1–3 months', cost: '~SEK 1,500', work: 'No fixed hour limit (studies must come first)', ins: 'Covered if enrolled 1+ year; else private', post: '12-month permit to seek work after graduation', gov: 'migrationsverket.se' }
+    es: {
+        visa: 'Student Visa (Tipo D)', need: 'EU/EEA: none. Non-EU: required for stays over 90 days',
+        time: '4–8 weeks', cost: '~€80', funds: '~€600/month for your whole stay (IPREM-based)',
+        work: 'Up to 30 hrs/week, with a work permit', ins: 'Private health insurance — full cover, no co-payments',
+        post: 'Up to 12 months job-search permit after graduation', idnum: 'NIE number + TIE residence card',
+        docs: ['Acceptance letter from a Spanish university', 'Passport valid 1 year beyond your stay',
+               'Proof of funds (~€600/month)', 'Private health insurance with full cover',
+               'Medical certificate', 'Criminal record certificate (apostilled)', 'Visa fee receipt + photos'],
+        arrive: ['Apply for your TIE residence card within 30 days', 'Get your NIE (foreigner ID number)',
+                 'Register at the town hall (empadronamiento)', 'Open a Spanish bank account', 'Enrol at your university'],
+        bank: 'Most banks offer free student accounts — bring your NIE and empadronamiento',
+        housing: 'Shared flats (piso compartido) are cheapest; deposits are usually 1–2 months rent',
+        renew: 'Renew your TIE annually, about 60 days before it expires', gov: 'exteriores.gob.es'
+    },
+    fr: {
+        visa: 'VLS-TS Student Long-Stay Visa', need: 'EU/EEA: none. Non-EU: required for stays over 90 days',
+        time: '2–4 weeks (after Campus France)', cost: '~€99', funds: '~€615/month',
+        work: 'Up to 964 hrs/year (~20 hrs/week)', ins: 'Free enrolment in the French student health system',
+        post: '12-month APS permit to find work', idnum: 'VLS-TS validation, then titre de séjour',
+        docs: ['Campus France registration ("Études en France")', 'Acceptance letter', 'Passport',
+               'Proof of funds (~€615/month)', 'Proof of accommodation', 'Civil liability insurance', 'Visa fee'],
+        arrive: ['Validate your VLS-TS online within 3 months — this is mandatory', 'Register with Assurance Maladie (free)',
+                 'Apply for CAF housing aid', 'Open a French bank account (you need a RIB)', 'Get a student transport pass'],
+        bank: 'A French RIB is needed for rent and CAF — open an account in your first weeks',
+        housing: 'CROUS halls are cheapest; CAF subsidises roughly €100–200/month',
+        renew: 'Apply to renew your titre de séjour 2 months before it expires', gov: 'france-visas.gouv.fr'
+    },
+    de: {
+        visa: 'National Visa (Type D) for study', need: 'EU/EEA: none. Non-EU: required',
+        time: '6–12 weeks', cost: '~€75', funds: 'Blocked account (Sperrkonto) ~€11,900/year',
+        work: '120 full or 240 half days per year', ins: 'Public or private health insurance mandatory (~€120/month)',
+        post: '18-month residence permit to seek work', idnum: 'Anmeldung + Aufenthaltstitel (residence permit)',
+        docs: ['University admission letter', 'Passport', 'Blocked account confirmation (~€11,900)',
+               'Health insurance proof', 'Biometric photos', 'Certified school/degree certificates (APS if required)'],
+        arrive: ['Anmeldung: register your address within 2 weeks', 'Open a German bank account',
+                 'Apply for your residence permit at the Ausländerbehörde', 'Enrol (Immatrikulation) at your university',
+                 'Pick up your Semesterticket for free local transport'],
+        bank: 'Most banks want your Anmeldung first — book that appointment early',
+        housing: 'Studentenwerk halls are cheapest but apply months ahead; WG flat-shares are the norm',
+        renew: 'Residence permit is issued for 1–2 years and renewed at the Ausländerbehörde', gov: 'germany.info'
+    },
+    it: {
+        visa: 'Student Visa (Type D)', need: 'EU/EEA: none. Non-EU: required over 90 days',
+        time: '3–6 weeks', cost: '~€50', funds: '~€6,000/year',
+        work: 'Up to 20 hrs/week', ins: 'Health insurance required (SSN registration or private)',
+        post: '12-month job-search permit', idnum: 'Codice Fiscale + permesso di soggiorno',
+        docs: ['Pre-enrolment on Universitaly', 'Acceptance letter', 'Passport', 'Proof of funds (~€6,000/year)',
+               'Health insurance', 'Proof of accommodation'],
+        arrive: ['Apply for your permesso di soggiorno within 8 days of arrival', 'Get your Codice Fiscale (tax code)',
+                 'Register with the SSN health service, or keep private cover', 'Open an Italian bank account'],
+        bank: 'You need a Codice Fiscale before a bank will open an account',
+        housing: 'University halls are limited — most students rent rooms in shared flats',
+        renew: 'Renew the permesso di soggiorno each academic year', gov: 'vistoperitalia.esteri.it'
+    },
+    pt: {
+        visa: 'Student Residence Visa', need: 'EU/EEA: none. Non-EU: required',
+        time: '2–4 weeks', cost: '~€90', funds: '~€760/month (linked to minimum wage)',
+        work: 'Allowed alongside study', ins: 'Health insurance required',
+        post: 'Job-search residence permit available', idnum: 'NIF (tax number) + AIMA residence permit',
+        docs: ['Acceptance letter', 'Passport', 'Proof of funds', 'Health insurance',
+               'Criminal record certificate', 'Proof of accommodation'],
+        arrive: ['Book your AIMA appointment for the residence permit', 'Get a NIF (tax number)',
+                 'Register at your local health centre (SNS)', 'Open a Portuguese bank account'],
+        bank: 'A NIF is required; many banks offer free student accounts',
+        housing: 'Rooms in Lisbon and Porto are pricey — smaller cities are far cheaper',
+        renew: 'Residence permit is renewed every 1–2 years', gov: 'vistos.mne.gov.pt'
+    },
+    nl: {
+        visa: 'Entry Visa (MVV) + residence permit', need: 'EU/EEA: none. Non-EU: usually required',
+        time: '2–8 weeks (your university applies for you)', cost: '~€210', funds: '~€1,100/month',
+        work: 'Up to 16 hrs/week, or full-time in June–August', ins: 'Dutch health insurance required once you work',
+        post: '1-year "orientation year" (zoekjaar) permit', idnum: 'BSN + residence permit (VVR)',
+        docs: ['Your university applies for the MVV/VVR on your behalf', 'Passport', 'Proof of funds (~€1,100/month)',
+               'Proof of tuition payment', 'TB test (some nationalities)'],
+        arrive: ['Collect your residence permit from the IND', 'Register at the municipality to get your BSN',
+                 'Take out Dutch health insurance if you take a job', 'Open a Dutch bank account',
+                 'Register with a GP (huisarts)'],
+        bank: 'A BSN makes this easy; Revolut/bunq work in the meantime',
+        housing: 'There is a severe shortage — arrange housing before you arrive, never after',
+        renew: 'The permit covers your course length; extend through the IND', gov: 'ind.nl'
+    },
+    ie: {
+        visa: 'Irish Study Visa (Type D)', need: 'EU/EEA: none. Non-EU: often required',
+        time: '4–8 weeks', cost: '~€60', funds: '~€10,000/year',
+        work: 'Up to 20 hrs/week (40 in holidays)', ins: 'Private medical insurance required',
+        post: 'Up to 2 years stay-back (Third Level Graduate Scheme)', idnum: 'IRP card + PPS number',
+        docs: ['Acceptance letter with tuition paid', 'Passport', 'Proof of funds (~€10,000)',
+               'Private medical insurance', 'Evidence of your English level'],
+        arrive: ['Register with immigration for your IRP card', 'Apply for a PPS number',
+                 'Open an Irish bank account', 'Register with a local GP'],
+        bank: 'Banks usually want proof of address plus your IRP',
+        housing: 'Dublin is expensive and scarce — secure a room well before term starts',
+        renew: 'The IRP is renewed annually', gov: 'irishimmigration.ie'
+    },
+    be: {
+        visa: 'Student Visa (Type D)', need: 'EU/EEA: none. Non-EU: required over 90 days',
+        time: '4–8 weeks', cost: '~€180', funds: '~€800/month',
+        work: 'Up to 20 hrs/week during term', ins: 'Health insurance required (join a mutuelle)',
+        post: '12-month job-search residence permit', idnum: 'Belgian residence card for foreigners',
+        docs: ['Acceptance letter', 'Passport', 'Proof of funds (~€800/month)', 'Medical certificate',
+               'Criminal record certificate', 'Visa fee'],
+        arrive: ['Register at your commune within 8 days', 'Apply for your residence card',
+                 'Join a mutuelle (health fund)', 'Open a Belgian bank account'],
+        bank: 'Commune registration is usually needed first',
+        housing: 'A "kot" (student room) is the norm — book early in Leuven and Ghent',
+        renew: 'Renew the residence card each year', gov: 'dofi.ibz.be'
+    },
+    fi: {
+        visa: 'Student Residence Permit', need: 'EU/EEA: register only. Non-EU: required',
+        time: '1–3 months', cost: '~€350', funds: '~€800/month (€6,720/year)',
+        work: 'Up to 30 hrs/week', ins: 'Insurance required (€40,000 or €100,000 cover by course length)',
+        post: '2-year job-search residence permit', idnum: 'Finnish personal identity code',
+        docs: ['Acceptance letter', 'Passport', 'Proof of funds (~€800/month)',
+               'Insurance certificate', 'Proof of tuition payment'],
+        arrive: ['Register your residence at DVV to get a personal identity code', 'Collect your residence permit card',
+                 'Open a Finnish bank account', 'Register with the student health service (FSHS)'],
+        bank: 'You need your identity code and permit card',
+        housing: 'Student housing foundations (HOAS and similar) are cheapest — apply the day you are admitted',
+        renew: 'The first permit is often 2 years; extend through Migri', gov: 'migri.fi'
+    },
+    gb: {
+        visa: 'Student Visa (formerly Tier 4)', need: 'All international students (including EU since 2021)',
+        time: '~3 weeks', cost: '£490 + £776/year health surcharge',
+        funds: '£1,483/month in London, £1,136 outside (up to 9 months), held 28 days',
+        work: 'Up to 20 hrs/week during term', ins: 'NHS access via the Immigration Health Surcharge',
+        post: 'Graduate Route: 2 years (3 for PhD)', idnum: 'BRP card / eVisa + share code',
+        docs: ['CAS from your university', 'Passport', 'Proof of funds (held 28 consecutive days)',
+               'ATAS certificate (some science courses)', 'TB test (some countries)', 'English test if required'],
+        arrive: ['Collect your BRP or set up your eVisa account', 'Complete university enrolment',
+                 'Register with a GP — NHS care is free once you have paid the surcharge',
+                 'Open a UK bank account', 'Get a 16–25 Railcard for cheaper travel'],
+        bank: 'A university enrolment letter plus your BRP is normally enough',
+        housing: 'Halls in first year; private lets usually need a UK guarantor or 6 months rent upfront',
+        renew: 'Extend from inside the UK before your visa expires', gov: 'gov.uk/student-visa'
+    },
+    us: {
+        visa: 'F-1 Student Visa', need: 'All international students',
+        time: '3–8 weeks (after I-20 + SEVIS)', cost: '$185 visa + $350 SEVIS fee',
+        funds: 'Full first-year cost of attendance (often $30,000+)',
+        work: 'On-campus only, 20 hrs/week; CPT/OPT later', ins: 'Health insurance required (~$1,500–2,500/year)',
+        post: 'OPT: 12 months, plus 24 more for STEM degrees', idnum: 'SEVIS ID + I-20 (SSN if you work)',
+        docs: ['I-20 from your school', 'SEVIS I-901 fee receipt', 'DS-160 confirmation page', 'Passport',
+               'Proof of funds', 'Visa interview appointment letter'],
+        arrive: ['Enter no earlier than 30 days before your programme start date',
+                 'Report to your school\'s international student office immediately',
+                 'Keep your I-20 signed and valid at all times', 'Apply for an SSN if you take campus work',
+                 'Open a US bank account'],
+        bank: 'Bring your passport, I-20 and proof of address; an SSN helps',
+        housing: 'On-campus is common in year one; off-campus leases often need a co-signer',
+        renew: 'F-1 status lasts your whole programme (D/S) — you only renew the visa stamp to re-enter',
+        gov: 'travel.state.gov'
+    },
+    ch: {
+        visa: 'National Visa (Type D) for study', need: 'EU/EFTA: permit only. Non-EU: visa required',
+        time: '8–12 weeks', cost: '~CHF 88', funds: '~CHF 21,000/year',
+        work: 'Up to 15 hrs/week during term', ins: 'Swiss health insurance mandatory (~CHF 250/month)',
+        post: '6-month permit to seek qualified work', idnum: 'Residence permit B',
+        docs: ['Acceptance letter', 'Passport', 'Proof of funds (~CHF 21,000/year)', 'Proof of accommodation',
+               'CV and motivation letter', 'Written commitment to leave after your studies'],
+        arrive: ['Register at the cantonal migration office within 14 days', 'Take out Swiss health insurance within 3 months',
+                 'Open a Swiss bank account', 'Collect your permit B card'],
+        bank: 'Your permit and address registration are usually required',
+        housing: 'Very expensive — student halls fill up fast, apply the moment you are admitted',
+        renew: 'Permit B is renewed annually', gov: 'sem.admin.ch'
+    },
+    ua: {
+        visa: 'Long-term Type D Student Visa', need: 'Most international students',
+        time: '2–4 weeks', cost: '~$85', funds: 'Proof of sufficient funds for your stay',
+        work: 'Restricted — generally not permitted on a study visa', ins: 'Medical insurance required',
+        post: 'You must apply separately for a work permit', idnum: 'Temporary residence permit',
+        warn: 'Ukraine is affected by an ongoing war. Check your government\'s travel advisory and your university\'s current status before making any plans.',
+        docs: ['Official invitation letter from the university', 'Passport', 'Proof of funds', 'Health insurance',
+               'HIV certificate', 'Criminal record certificate'],
+        arrive: ['Apply for a temporary residence permit within 15 days', 'Register your address',
+                 'Open a local bank account'],
+        bank: 'Passport plus your residence permit',
+        housing: 'University dormitories are very cheap and used by most international students',
+        renew: 'The temporary residence permit is renewed annually', gov: 'mfa.gov.ua'
+    },
+    dk: {
+        visa: 'Student Residence Permit', need: 'EU/Nordic: none. Non-EU: required',
+        time: '1–2 months', cost: '~DKK 1,900', funds: '~DKK 6,700/month',
+        work: 'Up to 20 hrs/week (full-time June–August)', ins: 'Covered by the Danish health system once you have a CPR',
+        post: '3-year establishment card to find work', idnum: 'CPR number + residence card',
+        docs: ['Acceptance letter', 'Passport', 'Proof of funds', 'Proof of tuition payment',
+               'Biometrics appointment confirmation'],
+        arrive: ['Register for a CPR number at Borgerservice', 'Collect your yellow health card',
+                 'Open a Danish bank account (NemKonto)', 'Set up MitID for digital services'],
+        bank: 'A CPR number is required',
+        housing: 'Copenhagen is tight — apply to housing foundations as early as possible',
+        renew: 'The permit normally covers your whole study period', gov: 'nyidanmark.dk'
+    },
+    se: {
+        visa: 'Residence Permit for Studies', need: 'EU/EEA: none. Non-EU: required',
+        time: '1–3 months', cost: '~SEK 1,500', funds: 'SEK 10,300/month for 10 months each year',
+        work: 'No fixed hour limit, but studies must come first', ins: 'Covered if enrolled 1+ year; otherwise private',
+        post: '12-month permit to seek work after graduation', idnum: 'Personnummer (for stays of 1+ year)',
+        docs: ['Acceptance letter', 'Passport', 'Proof of funds', 'First tuition instalment paid',
+               'Comprehensive health insurance'],
+        arrive: ['Collect your residence permit card', 'Register with Skatteverket for a personnummer (1+ year stays)',
+                 'Open a Swedish bank account', 'Get your student union card for discounts'],
+        bank: 'A personnummer makes this far easier',
+        housing: 'Housing is queue-based — register the day you are admitted',
+        renew: 'Extend with Migrationsverket before your permit expires', gov: 'migrationsverket.se'
+    }
 };
 
 function renderVisaGuide(code, countryName) {
@@ -4924,58 +6231,82 @@ function renderVisaGuide(code, countryName) {
     if (!el) return;
     var v = VISA_DATA[code];
     if (!v) { el.style.display = 'none'; el.innerHTML = ''; return; }
-    var rows = [
-        { ic: 'fa-passport',        lbl: 'Visa type',           val: v.visa },
-        { ic: 'fa-circle-question', lbl: 'Who needs it',        val: v.need },
-        { ic: 'fa-clock',           lbl: 'Processing time',     val: v.time },
-        { ic: 'fa-coins',           lbl: 'Application cost',     val: v.cost },
-        { ic: 'fa-briefcase',       lbl: 'Work while studying',  val: v.work },
-        { ic: 'fa-heart-pulse',     lbl: 'Health insurance',     val: v.ins },
-        { ic: 'fa-graduation-cap',  lbl: 'After graduation',     val: v.post }
+
+    function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+    function list(items, cls) {
+        return (items || []).map(function (t) { return '<li class="' + cls + '">' + esc(t) + '</li>'; }).join('');
+    }
+
+    // Six quick facts a student checks first.
+    var facts = [
+        { ic: 'fa-passport',        lbl: 'Visa type',       val: v.visa },
+        { ic: 'fa-circle-question', lbl: 'Who needs it',    val: v.need },
+        { ic: 'fa-clock',           lbl: 'Processing time', val: v.time },
+        { ic: 'fa-coins',           lbl: 'Application cost',val: v.cost },
+        { ic: 'fa-wallet',          lbl: 'Proof of funds',  val: v.funds },
+        { ic: 'fa-heart-pulse',     lbl: 'Health insurance',val: v.ins }
     ];
-    // Preserve open/closed state across re-renders (e.g. country change).
-    var wasOpen = el.classList.contains('visa--open');
+    // "Work, money & after" — the practical stuff nobody tells you.
+    var after = [
+        { ic: 'fa-briefcase',      lbl: 'Work while studying', val: v.work },
+        { ic: 'fa-id-card',        lbl: 'ID you will need',    val: v.idnum },
+        { ic: 'fa-building-columns', lbl: 'Bank account',      val: v.bank },
+        { ic: 'fa-house',          lbl: 'Housing',             val: v.housing },
+        { ic: 'fa-rotate',         lbl: 'Renewing your permit',val: v.renew },
+        { ic: 'fa-graduation-cap', lbl: 'After graduation',    val: v.post }
+    ].filter(function (r) { return !!r.val; });
+
     el.innerHTML =
-        '<button class="visa__toggle" type="button" aria-expanded="' + (wasOpen ? 'true' : 'false') + '">' +
-            '<span class="visa__toggle__icon"><i class="fa-solid fa-passport"></i></span>' +
-            '<span class="visa__toggle__txt">' +
-                '<span class="visa__toggle__title">Visa &amp; Logistics — ' + countryName + '</span>' +
-                '<span class="visa__toggle__sub">Visas, work rights, insurance &amp; post-study options — tap to read</span>' +
-            '</span>' +
-            '<span class="visa__chev"><i class="fa-solid fa-chevron-down"></i></span>' +
-        '</button>' +
-        '<div class="visa__drawer">' +
-            '<div class="visa__drawer__inner">' +
-                '<div class="visa__grid">' +
-                    rows.map(function (r) {
-                        return '<div class="visa__item">' +
-                            '<span class="visa__item__icon"><i class="fa-solid ' + r.ic + '"></i></span>' +
-                            '<span class="visa__item__txt">' +
-                                '<span class="visa__item__lbl">' + r.lbl + '</span>' +
-                                '<span class="visa__item__val">' + r.val + '</span>' +
-                            '</span>' +
-                        '</div>';
-                    }).join('') +
+        '<div class="visa2">' +
+            '<div class="visa2__hd">' +
+                '<span class="visa2__hd__ic"><i class="fa-solid fa-passport"></i></span>' +
+                '<div class="visa2__hd__txt">' +
+                    '<h3 class="visa2__hd__title">Visa &amp; Logistics — ' + esc(countryName) + '</h3>' +
+                    '<p class="visa2__hd__sub">Everything an international student needs before leaving and after landing</p>' +
                 '</div>' +
-                '<div class="visa__foot">' +
-                    (v.gov ? '<a class="visa__gov" href="https://' + v.gov + '" target="_blank" rel="noopener"><i class="fa-solid fa-up-right-from-square"></i> Official government site</a>' : '') +
-                    '<p class="visa__note"><i class="fa-solid fa-circle-info"></i> Curated guidance for a typical international student — rules vary by nationality and change often. Always confirm with the official source before applying.</p>' +
+                (v.gov ? '<a class="visa2__gov" href="https://' + v.gov + '" target="_blank" rel="noopener">' +
+                    '<i class="fa-solid fa-up-right-from-square"></i> Official site</a>' : '') +
+            '</div>' +
+
+            (v.warn ? '<div class="visa2__warn"><i class="fa-solid fa-triangle-exclamation"></i> ' + esc(v.warn) + '</div>' : '') +
+
+            '<div class="visa2__facts">' +
+                facts.filter(function (f) { return !!f.val; }).map(function (f) {
+                    return '<div class="visa2__fact">' +
+                        '<span class="visa2__fact__ic"><i class="fa-solid ' + f.ic + '"></i></span>' +
+                        '<span class="visa2__fact__lbl">' + f.lbl + '</span>' +
+                        '<span class="visa2__fact__val">' + esc(f.val) + '</span>' +
+                    '</div>';
+                }).join('') +
+            '</div>' +
+
+            '<div class="visa2__cols">' +
+                '<div class="visa2__col">' +
+                    '<h4 class="visa2__col__t"><i class="fa-solid fa-list-check"></i> Before you go</h4>' +
+                    '<ul class="visa2__ul">' + list(v.docs, 'visa2__li') + '</ul>' +
+                '</div>' +
+                '<div class="visa2__col">' +
+                    '<h4 class="visa2__col__t"><i class="fa-solid fa-plane-arrival"></i> Your first weeks</h4>' +
+                    '<ol class="visa2__ol">' + list(v.arrive, 'visa2__li visa2__li--step') + '</ol>' +
+                '</div>' +
+                '<div class="visa2__col">' +
+                    '<h4 class="visa2__col__t"><i class="fa-solid fa-briefcase"></i> Work, money &amp; after</h4>' +
+                    '<div class="visa2__rows">' +
+                        after.map(function (r) {
+                            return '<div class="visa2__row">' +
+                                '<span class="visa2__row__ic"><i class="fa-solid ' + r.ic + '"></i></span>' +
+                                '<span class="visa2__row__txt"><b>' + r.lbl + '</b><span>' + esc(r.val) + '</span></span>' +
+                            '</div>';
+                        }).join('') +
+                    '</div>' +
                 '</div>' +
             '</div>' +
+
+            '<p class="visa2__note"><i class="fa-solid fa-circle-info"></i> Curated guidance for a typical international student. ' +
+            'Rules, fees and thresholds vary by nationality and change often — always confirm with the official source before applying.</p>' +
         '</div>';
-    el.classList.toggle('visa--open', wasOpen);
     el.style.display = 'block';
 }
-
-// Expand / collapse the visa guide (event delegation).
-document.addEventListener('click', function (e) {
-    var tog = e.target.closest('.visa__toggle');
-    if (!tog) return;
-    var sec = tog.closest('.visa');
-    if (!sec) return;
-    var open = sec.classList.toggle('visa--open');
-    tog.setAttribute('aria-expanded', open ? 'true' : 'false');
-});
 
 function applyCountryTheme(code) {
     var themes = {
@@ -5058,10 +6389,8 @@ function buildRankCarousel(code) {
         var trendLabel = item.trend === 'up' ? '↑ Rising' : item.trend === 'down' ? '↓ Falling' : '— Stable';
         var trendGlyph = item.trend === 'up' ? '↑' : item.trend === 'down' ? '↓' : '—';
         var abbr4      = (u.abbr || u.name.slice(0,4)).slice(0,5);
-        var logoHtml   = logo
-            ? '<img class="rnk__logo__img" src="' + logo + '" alt="' + abbr4 + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">' +
-              '<div class="rnk__logo__fallback" style="background:' + (u.color||'#555') + ';display:none">' + abbr4 + '</div>'
-            : '<div class="rnk__logo__fallback" style="background:' + (u.color||'#555') + '">' + abbr4 + '</div>';
+        // Same real, hydrated logo used across the app (Wikipedia → icon.horse → monogram).
+        var logoHtml   = '<div class="rnk__logo__wrap">' + uniLogo(u, 66) + '</div>';
         var fields = (u.fields || []).slice(0, 2);
         return '<div class="rnk__card' + medalCls + '" data-id="' + u.id + '" style="cursor:pointer">' +
             '<div class="rnk__rank__overlay"><span class="rnk__num">' + (i + 1) + '</span></div>' +
@@ -5069,7 +6398,7 @@ function buildRankCarousel(code) {
             logoHtml +
             '<div class="rnk__hover__panel">' +
                 '<div class="rnk__hv__top">' +
-                    '<div class="rnk__hv__abbr" style="background:' + (u.color||'#555') + '">' + abbr4 + '</div>' +
+                    '<div class="rnk__hv__abbr rnk__hv__abbr--logo">' + uniLogo(u, 34) + '</div>' +
                     '<div class="rnk__hv__meta">' +
                         '<div class="rnk__hv__name">' + (u.name || u.abbr) + '</div>' +
                         '<div class="rnk__hv__trend rnk__hv__trend--' + trendCls + '">' + trendLabel + '</div>' +
@@ -5113,7 +6442,7 @@ function updateSliderRange() {
 
     slider.min  = rMin;
     slider.max  = rMax;
-    slider.step = 100;
+    slider.step = 250;
     if (+slider.value < rMin) slider.value = rMin;
     if (+slider.value > rMax) slider.value = rMax;
 
@@ -5121,6 +6450,14 @@ function updateSliderRange() {
     var maxLbl = document.getElementById('mpdBudgetMax');
     if (minLbl) minLbl.textContent = '€' + rMin.toLocaleString() + '/yr';
     if (maxLbl) maxLbl.textContent = '€' + rMax.toLocaleString() + '/yr';
+
+    // keep the animated fill (--pct) correct after the range is (re)computed
+    var pct = rMax > rMin ? ((+slider.value - rMin) / (rMax - rMin)) * 100 : 0;
+    pct = Math.max(0, Math.min(100, pct));
+    var wrap = slider.closest('.mpd__budget__wrap') || slider;
+    wrap.style.setProperty('--pct', pct.toFixed(1) + '%');
+    slider.style.setProperty('--pct', pct.toFixed(1) + '%');
+
     renderBudgetMatches();
 }
 
@@ -5154,7 +6491,7 @@ function renderBudgetPage() {
         return '<div class="bm__card" style="--bm-accent:' + col + ';border-left-color:' + col + '" data-id="' + u.id + '">' +
             '<div class="bm__card__head">' +
                 '<div class="bm__card__head__left">' +
-                    '<div class="bm__abbr" style="background:' + col + '">' + (u.abbr || '?') + '</div>' +
+                    '<div class="bm__abbr bm__abbr--logo">' + uniLogo(u, 30) + '</div>' +
                     rankHtml +
                 '</div>' +
                 '<button class="bm__save mp__save__btn" data-id="' + u.id + '" style="color:' + (on ? 'rgb(228,155,20)' : 'rgba(0,0,0,.2)') + '">' +
@@ -5176,13 +6513,18 @@ function renderBudgetPage() {
                 (u.founded  ? '<span class="bm__stat"><i class="fa-solid fa-building-columns"></i> Est. ' + u.founded + '</span>' : '') +
                 (u.students ? '<span class="bm__stat"><i class="fa-solid fa-user-group"></i> ' + u.students + '</span>' : '') +
             '</div>' +
-            (window.UniRating ? '<div class="mp__card__rating mp__card__rating--bottom">' + window.UniRating.compact(u) + '</div>' : '') +
+            '<div class="bm__botrow">' +
+                (window.UniRating ? '<div class="mp__card__rating">' + window.UniRating.compact(u) + '</div>' : '<span></span>') +
+                recruitersHTML(u) +
+            '</div>' +
         '</div>';
     }).join('');
 
     grid.querySelectorAll('.bm__card').forEach(function(card) {
         card.addEventListener('click', function(e) {
             if (e.target.closest('.mp__save__btn')) return;
+            var recr = e.target.closest('.mp__card__recr');
+            if (recr) { e.stopPropagation(); var nm = recr.getAttribute('data-recr-uni'); var uu = UNI.find(function(x){ return x.name === nm; }); if (window.openCareers) window.openCareers(uu || nm); return; }
             var u = UNI.find(function(x) { return x.id === card.dataset.id; });
             if (u) showUniDetail(u);
         });
@@ -5217,17 +6559,16 @@ function renderBudgetMatches() {
     var badge = document.getElementById('budgetBadge');
     if (badge) {
         if (!budgetChosen) {
-            badge.innerHTML = '<span class="mp__budget__badge__lbl">Budget</span>' +
-                              '<span class="mp__budget__badge__hint">How much are we spending this year?</span>';
-            badge.className = 'mp__budget__badge mp__budget__badge--prompt';
+            badge.innerHTML = '<span class="bdg__ic"><i class="fa-solid fa-piggy-bank"></i></span><span class="bdg__t"><small>Yearly budget</small><b>Set yours</b></span><span class="bdg__go"><i class="fa-solid fa-plus"></i></span>';
+            badge.className = 'mp__budget__badge bdg bdg--prompt';
+            badge.title = 'How much are you planning to spend on university each year?';
             badge.style.display = 'inline-flex';
         } else {
-            var kLabel = budget >= 1000
-                ? '€' + (budget / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + 'k/year'
-                : '€' + budget.toLocaleString() + '/year';
-            badge.textContent = kLabel;
-            badge.className = 'mp__budget__badge' +
-                (budget > 15000 ? ' mp__budget__badge--high' : budget > 5000 ? ' mp__budget__badge--mid' : '');
+            var kLabel = budget >= 1000 ? '€' + (budget / 1000).toLocaleString(undefined, { maximumFractionDigits: 1 }) + 'k' : '€' + budget.toLocaleString();
+            var tone = budget > 15000 ? 'high' : budget > 5000 ? 'mid' : 'low';
+            badge.innerHTML = '<span class="bdg__ic"><i class="fa-solid fa-wallet"></i></span><span class="bdg__t"><small>Budget / year</small><b>' + kLabel + '</b></span>' +
+                '<span class="bdg__meter" aria-hidden="true"><i style="--p:' + Math.max(.06, Math.min(1, budget / 30000)).toFixed(3) + '"></i></span>';
+            badge.className = 'mp__budget__badge bdg bdg--' + tone;
             badge.style.display = 'inline-flex';
         }
     }
@@ -5235,6 +6576,7 @@ function renderBudgetMatches() {
     _bmMatched = (typeof UNI !== 'undefined' ? UNI : []).filter(function(u) {
         return tuitionMinCost(u) <= budget;
     });
+    if (badge && budgetChosen) badge.title = '€' + budget.toLocaleString() + ' a year for tuition · ' + _bmMatched.length + ' universities here fit — tap to change';
 
     if (_bmMatched.length === 0) {
         section.style.display = 'none';
@@ -5264,13 +6606,17 @@ function updateDshWidgets() {
             .filter(function(d) { return d.country === currentCountryCode; })
             .concat(custom.map(function(d) {
                 return { id: d.id, uniAbbr: '★', uniColor: '#6c63ff', type: d.type, title: d.title, date: d.date };
-            }));
+            }))
+            // confirmed deadlines of saved scholarships (deadlines.js)
+            .concat(typeof window.dtScholarshipDeadlines === 'function' ? window.dtScholarshipDeadlines() : [])
+            // the student's own applications (apply.js)
+            .concat(typeof window.dtApplicationDeadlines === 'function' ? window.dtApplicationDeadlines() : []);
 
         var pinned = pinId ? allItems.find(function(d) { return d.id === pinId; }) : null;
         var next   = null;
         if (!pinned) {
             next = allItems
-                .filter(function(d) { return done.indexOf(d.id) === -1; })
+                .filter(function(d) { return done.indexOf(d.id) === -1 && getCountdown(d.date).urgency !== 'overdue'; })   // next UPCOMING, never an overdue one
                 .sort(function(a, b) { return new Date(a.date) - new Date(b.date); })[0] || null;
         }
 
@@ -5315,77 +6661,104 @@ function getDestTime() {
     var canvas  = document.getElementById('dshClockCanvas');
     var timeEl  = document.getElementById('dshClockTime');
     var dateEl  = document.getElementById('dshClockDate');
+    var tzEl    = document.getElementById('dshClockTz');
     if (!canvas || !canvas.getContext) return;
     var ctx = canvas.getContext('2d');
+    var SIZE = 104, lastLabel = '';
+
+    // Crisp on Retina: back the canvas with devicePixelRatio pixels.
+    function fit() {
+        var dpr = Math.min(window.devicePixelRatio || 1, 3);
+        if (canvas._dpr === dpr) return;
+        canvas._dpr = dpr;
+        canvas.width = SIZE * dpr; canvas.height = SIZE * dpr;
+        canvas.style.width = canvas.style.height = SIZE + 'px';
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    function hand(ang, from, to, width, color) {
+        ctx.beginPath();
+        ctx.moveTo(c + Math.cos(ang) * from, c + Math.sin(ang) * from);
+        ctx.lineTo(c + Math.cos(ang) * to, c + Math.sin(ang) * to);
+        ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'round'; ctx.stroke();
+    }
+    var c = SIZE / 2;
 
     function draw() {
-        var W = canvas.width, H = canvas.height, cx = W / 2, cy = H / 2;
-        var r = Math.min(W, H) / 2 - 4;
-        var dt = getDestTime();
+        if (document.hidden) return;   // skip canvas redraw + Intl work in background tabs
+        fit();
+        var r = c - 2, dt = getDestTime();
         var h = dt.h % 12, m = dt.m, s = dt.s;
-
-        // Theme-aware palette — dark mode draws in warm cream so the dial reads
-        // clearly against the dark hero container; second hand uses the coral accent.
         var dark = document.documentElement.getAttribute('data-theme') === 'dark';
-        var col = dark ? {
-            rim: 'rgba(245,244,238,0.22)', tickMaj: 'rgba(245,244,238,0.85)', tickMin: 'rgba(245,244,238,0.32)',
-            hour: 'rgba(245,244,238,0.95)', minute: 'rgba(245,244,238,0.78)', second: '#e89274', hub: 'rgba(245,244,238,0.92)'
-        } : {
-            rim: 'rgba(0,0,0,0.30)', tickMaj: 'rgba(0,0,0,0.65)', tickMin: 'rgba(0,0,0,0.25)',
-            hour: 'rgba(0,0,0,0.90)', minute: 'rgba(0,0,0,0.75)', second: '#e74c3c', hub: 'rgba(0,0,0,0.85)'
-        };
+        var ink = dark ? '#f5f4ee' : '#1c1409';
+        var accent = dark ? '#e89274' : '#e07a12';
 
-        ctx.clearRect(0, 0, W, H);
+        ctx.clearRect(0, 0, SIZE, SIZE);
 
-        ctx.beginPath(); ctx.arc(cx, cy, r, 0, 2 * Math.PI);
-        ctx.strokeStyle = col.rim; ctx.lineWidth = 1.5; ctx.stroke();
+        // Face — soft warm gradient.
+        var g = ctx.createRadialGradient(c - r * .3, c - r * .35, r * .1, c, c, r);
+        g.addColorStop(0, dark ? '#3a3935' : '#ffffff');
+        g.addColorStop(1, dark ? '#24231f' : '#fbf3e7');
+        ctx.beginPath(); ctx.arc(c, c, r, 0, 2 * Math.PI); ctx.fillStyle = g; ctx.fill();
 
-        for (var i = 0; i < 12; i++) {
-            var ang = (i / 12) * 2 * Math.PI - Math.PI / 2;
-            var isMaj = i % 3 === 0;
-            ctx.beginPath();
-            ctx.moveTo(cx + Math.cos(ang) * (r - (isMaj ? 8 : 5)),
-                       cy + Math.sin(ang) * (r - (isMaj ? 8 : 5)));
-            ctx.lineTo(cx + Math.cos(ang) * (r - 1),
-                       cy + Math.sin(ang) * (r - 1));
-            ctx.strokeStyle = isMaj ? col.tickMaj : col.tickMin;
-            ctx.lineWidth = isMaj ? 2 : 1; ctx.stroke();
+        // Seconds progress ring around the rim.
+        var ringR = r - 3;
+        ctx.beginPath(); ctx.arc(c, c, ringR, 0, 2 * Math.PI);
+        ctx.strokeStyle = dark ? 'rgba(255,255,255,.08)' : 'rgba(217,124,20,.13)'; ctx.lineWidth = 3; ctx.stroke();
+        if (s > 0) {
+            var rg = ctx.createLinearGradient(0, 0, SIZE, SIZE);
+            rg.addColorStop(0, dark ? '#f0a58a' : '#f59220'); rg.addColorStop(1, accent);
+            ctx.beginPath(); ctx.arc(c, c, ringR, -Math.PI / 2, -Math.PI / 2 + (s / 60) * 2 * Math.PI);
+            ctx.strokeStyle = rg; ctx.lineWidth = 3; ctx.lineCap = 'round'; ctx.stroke();
         }
 
-        // Subtle glow on the hands in dark mode for a polished look.
-        if (dark) { ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 3; }
+        // Hour index: bars at 12/3/6/9 (12 in accent), dots elsewhere.
+        for (var i = 0; i < 12; i++) {
+            var a = (i / 12) * 2 * Math.PI - Math.PI / 2;
+            if (i % 3 === 0) hand(a, r - 15, r - 10, 2.6, i === 0 ? accent : ink);
+            else {
+                ctx.beginPath(); ctx.arc(c + Math.cos(a) * (r - 12), c + Math.sin(a) * (r - 12), 1.3, 0, 2 * Math.PI);
+                ctx.fillStyle = dark ? 'rgba(245,244,238,.4)' : 'rgba(28,20,9,.28)'; ctx.fill();
+            }
+        }
 
-        var hAng = ((h + m / 60) / 12) * 2 * Math.PI - Math.PI / 2;
-        ctx.beginPath(); ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + Math.cos(hAng) * r * 0.50, cy + Math.sin(hAng) * r * 0.50);
-        ctx.strokeStyle = col.hour; ctx.lineWidth = 3.5; ctx.lineCap = 'round'; ctx.stroke();
+        // Hands.
+        ctx.save();
+        ctx.shadowColor = dark ? 'rgba(0,0,0,.5)' : 'rgba(60,40,10,.22)'; ctx.shadowBlur = 3; ctx.shadowOffsetY = 1;
+        hand(((h + m / 60) / 12) * 2 * Math.PI - Math.PI / 2, -4, r * .46, 4.5, ink);
+        hand(((m + s / 60) / 60) * 2 * Math.PI - Math.PI / 2, -5, r * .68, 3, dark ? 'rgba(245,244,238,.85)' : 'rgba(28,20,9,.82)');
+        ctx.restore();
+        var sa = (s / 60) * 2 * Math.PI - Math.PI / 2;
+        hand(sa, -r * .18, r * .72, 1.4, accent);
+        ctx.beginPath(); ctx.arc(c - Math.cos(sa) * r * .18, c - Math.sin(sa) * r * .18, 2.2, 0, 2 * Math.PI); ctx.fillStyle = accent; ctx.fill();
 
-        var mAng = ((m + s / 60) / 60) * 2 * Math.PI - Math.PI / 2;
-        ctx.beginPath(); ctx.moveTo(cx, cy);
-        ctx.lineTo(cx + Math.cos(mAng) * r * 0.74, cy + Math.sin(mAng) * r * 0.74);
-        ctx.strokeStyle = col.minute; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.stroke();
+        // Hub.
+        ctx.beginPath(); ctx.arc(c, c, 4.2, 0, 2 * Math.PI); ctx.fillStyle = accent; ctx.fill();
+        ctx.beginPath(); ctx.arc(c, c, 1.7, 0, 2 * Math.PI); ctx.fillStyle = dark ? '#24231f' : '#fff'; ctx.fill();
 
-        var sAng = (s / 60) * 2 * Math.PI - Math.PI / 2;
-        ctx.beginPath();
-        ctx.moveTo(cx - Math.cos(sAng) * r * 0.20, cy - Math.sin(sAng) * r * 0.20);
-        ctx.lineTo(cx + Math.cos(sAng) * r * 0.84, cy + Math.sin(sAng) * r * 0.84);
-        ctx.strokeStyle = col.second; ctx.lineWidth = 1.5; ctx.lineCap = 'round'; ctx.stroke();
-        ctx.shadowBlur = 0;
-
-        ctx.beginPath(); ctx.arc(cx, cy, 3, 0, 2 * Math.PI);
-        ctx.fillStyle = col.second; ctx.fill();
-        ctx.beginPath(); ctx.arc(cx, cy, 1.2, 0, 2 * Math.PI);
-        ctx.fillStyle = col.hub; ctx.fill();
-
-        if (timeEl) timeEl.textContent = String(dt.h).padStart(2,'0') + ':' + String(m).padStart(2,'0');
+        // Digital readout — DOM only touched when the minute changes.
+        var label = String(dt.h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + '|' + dt.tz;
+        if (label === lastLabel) return;
+        lastLabel = label;
+        if (timeEl) timeEl.innerHTML = String(dt.h).padStart(2, '0') + '<span class="mp__hero__clock__colon">:</span>' + String(m).padStart(2, '0');
         if (dateEl) {
-            dateEl.textContent = new Intl.DateTimeFormat('en-GB', {
+            dateEl.innerHTML = '<i class="fa-regular fa-calendar"></i> ' + new Intl.DateTimeFormat('en-GB', {
                 timeZone: dt.tz, weekday: 'short', day: 'numeric', month: 'short'
             }).format(dt.raw);
+        }
+        if (tzEl) {
+            var off = '';
+            try {
+                off = (new Intl.DateTimeFormat('en-GB', { timeZone: dt.tz, timeZoneName: 'shortOffset' }).formatToParts(dt.raw)
+                    .filter(function (p) { return p.type === 'timeZoneName'; })[0] || {}).value || '';
+            } catch (e) {}
+            var city = String(dt.tz).split('/').pop().replace(/_/g, ' ');
+            tzEl.innerHTML = '<i class="fa-solid fa-location-dot"></i> ' + city + (off ? ' · ' + off : '');
         }
     }
     draw();
     setInterval(draw, 1000);
+    // Redraw immediately on theme switch so the dial never shows the old palette.
+    new MutationObserver(function () { lastLabel = ''; draw(); }).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 }());
 
 (function() {
@@ -5456,7 +6829,7 @@ function getDestTime() {
             var on  = getSaved().indexOf(u.id) !== -1;
             var col = u.color || '#555';
             return '<div class="ba__item" data-id="' + u.id + '">' +
-                '<div class="ba__item__abbr" style="background:' + col + '">' + (u.abbr || '?') + '</div>' +
+                '<div class="ba__item__abbr ba__item__abbr--logo">' + uniLogo(u, 38) + '</div>' +
                 '<div class="ba__item__info">' +
                     '<div class="ba__item__name">' + (u.name || '?') + '</div>' +
                     '<div class="ba__item__meta">' +
@@ -5629,9 +7002,7 @@ function applyLanguage(lang) {
     document.querySelectorAll('.mp__nav__btn[data-tab]').forEach(function(btn) {
         var key = 'nav_' + btn.dataset.tab;
         if (!t[key]) return;
-        var icon = btn.querySelector('i');
-        btn.textContent = ' ' + t[key];
-        if (icon) btn.insertBefore(icon, btn.firstChild);
+        setNavLabel(btn, t[key]);
     });
 
     var savedGrid = document.getElementById('savedGrid');
@@ -5811,6 +7182,15 @@ function applyLanguage(lang) {
             drop.style.display = 'none';
         }
     });
+    // The header budget widget opens this menu right at the budget slider.
+    var budgetBtn = document.getElementById('budgetBadge');
+    if (budgetBtn) budgetBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        drop.style.display = 'block'; drop.style.animation = 'mpd-fadein .2s ease both';
+        var sl = document.getElementById('mpdBudgetSlider'); if (!sl) return;
+        var sec = sl.closest('.mpd__section') || sl.parentNode;
+        setTimeout(function () { sec.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); sec.classList.remove('is-flash'); void sec.offsetWidth; sec.classList.add('is-flash'); sl.focus({ preventScroll: true }); }, 60);
+    });
 
     var prof = getProfile();
 
@@ -5908,6 +7288,21 @@ function applyLanguage(lang) {
         { max: Infinity, label: 'Premium',    color: '#8e44ad' }
     ];
 
+    // Keep the animated gradient fill (--pct) and accent colour in sync with the
+    // slider position so the track "fills up" as you drag and the thumb glows.
+    function paintBudgetSlider(budget) {
+        if (!mpdSlider) return;
+        var min = +mpdSlider.min || 0;
+        var max = +mpdSlider.max || 100;
+        var pct = max > min ? ((budget - min) / (max - min)) * 100 : 0;
+        pct = Math.max(0, Math.min(100, pct));
+        // Set on the wrapper so both the slider fill and the shimmer sweep
+        // (which live on the wrapper's ::after) stay in sync via inheritance.
+        var wrap = mpdSlider.closest('.mpd__budget__wrap') || mpdSlider;
+        wrap.style.setProperty('--pct', pct.toFixed(1) + '%');
+        mpdSlider.style.setProperty('--pct', pct.toFixed(1) + '%');
+    }
+
     function updateBudgetDisplay(budget) {
         if (mpdAmt) {
             mpdAmt.innerHTML = '€' + budget.toLocaleString() + '<span>/yr</span>';
@@ -5918,6 +7313,7 @@ function applyLanguage(lang) {
             mpdTier.textContent = tier.label;
             mpdTier.style.color = tier.color;
         }
+        paintBudgetSlider(budget);
     }
 
     if (mpdSlider) {
@@ -5928,6 +7324,10 @@ function applyLanguage(lang) {
         mpdSlider.addEventListener('input', function() {
             var val = +mpdSlider.value;
             updateBudgetDisplay(val);
+            // brief "pop" pulse on the thumb each time the value changes
+            mpdSlider.classList.remove('mpd__budget__slider--bump');
+            void mpdSlider.offsetWidth;
+            mpdSlider.classList.add('mpd__budget__slider--bump');
             var p = getProfile();
             p.budget = val;
             p.budgetSet = true;     // user has now chosen a budget (drives the header badge)
@@ -5954,6 +7354,100 @@ function applyLanguage(lang) {
             }
         });
     }
+}());
+
+/* ── Profile header effects (Nitro-style, pluggable) ──
+   ProfileFX is a tiny registry: each effect is a builder that fills the
+   #mpdFx layer with its own elements. Adding a new effect later is two steps:
+     1. ProfileFX.register('sparkle', function(layer){ ... });   // + a CSS block
+     2. ProfileFX.apply('sparkle');
+   The active effect is remembered in localStorage so it survives reloads. */
+window.ProfileFX = (function() {
+    var LAYER_ID = 'mpdFx';
+    var STORE_KEY = 'uniscout_profile_fx';
+
+    function repeat(html, n) { var s = ''; for (var i = 0; i < n; i++) s += html; return s; }
+
+    // registry: effect name -> builder(layerEl). Keep builders side-effect free
+    // beyond writing into the layer so effects stay swappable.
+    var current = 'fire';
+
+    var registry = {
+        none: function(layer) { layer.innerHTML = ''; },
+        fire: function(layer) {
+            layer.innerHTML = repeat('<span class="mpd__flame"></span>', 6) +
+                              repeat('<span class="mpd__ember"></span>', 7);
+        },
+        aurora: function(layer) {
+            layer.innerHTML = '<span class="mpd__aurora"></span>' +
+                              '<span class="mpd__aurora mpd__aurora--2"></span>';
+        },
+        sparkle: function(layer) {
+            var html = '';
+            for (var i = 0; i < 16; i++) {
+                var l = Math.round(Math.random() * 100);
+                var t = Math.round(Math.random() * 100);
+                var d = (Math.random() * 3).toFixed(2);
+                var s = (0.5 + Math.random() * 0.9).toFixed(2);
+                html += '<span class="mpd__spark" style="left:' + l + '%;top:' + t +
+                        '%;animation-delay:-' + d + 's;--s:' + s + '"></span>';
+            }
+            layer.innerHTML = html;
+        }
+    };
+
+    function register(name, builder) { registry[name] = builder; }
+
+    // reflect the active effect in the settings picker (if it's on the page)
+    function syncPicker(name) {
+        var opts = document.querySelectorAll('.mpd__fx__opt');
+        for (var i = 0; i < opts.length; i++) {
+            opts[i].classList.toggle('mpd__fx__opt--on', opts[i].getAttribute('data-fx') === name);
+        }
+    }
+
+    function apply(name) {
+        var layer = document.getElementById(LAYER_ID);
+        if (!layer) return;
+        if (!registry[name]) name = 'fire';
+        current = name;
+        layer.className = 'mpd__fx' + (name && name !== 'none' ? ' mpd__fx--' + name : '');
+        layer.setAttribute('data-effect', name);
+        registry[name](layer);
+        syncPicker(name);
+        try { localStorage.setItem(STORE_KEY, name); } catch (e) {}
+    }
+
+    function init() {
+        var saved;
+        try { saved = localStorage.getItem(STORE_KEY); } catch (e) {}
+        var layer = document.getElementById(LAYER_ID);
+        var fallback = (layer && layer.getAttribute('data-effect')) || 'fire';
+        apply(saved || fallback);
+
+        // wire up the settings picker buttons
+        var opts = document.getElementById('mpdFxOpts');
+        if (opts) {
+            opts.addEventListener('click', function(e) {
+                var btn = e.target.closest('.mpd__fx__opt');
+                if (!btn) return;
+                apply(btn.getAttribute('data-fx'));
+            });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', init);
+    } else {
+        init();
+    }
+
+    return {
+        register: register,
+        apply: apply,
+        current: function() { return current; },
+        list: function() { return Object.keys(registry); }
+    };
 }());
 
 /* ── Overview scroll: staggered reveal + header shadow ── */
@@ -6036,6 +7530,10 @@ function setDigestEnabled(on) { localStorage.setItem(DIGEST_ON_KEY, on ? '1' : '
 function syncDigestSubscription() {
     try {
         if (!user || !user.email) return;
+        // Wait until the server has told us whether this user is Elite: at page load eliteState is
+        // still the default (not Elite), and acting on that unsubscribed — and wiped — every Elite
+        // user on every visit.
+        if (!eliteKnown) return;
         // The daily news digest is an Elite perk: only Elite users (who haven't
         // turned it off) stay subscribed — everyone else is ensured unsubscribed.
         var elite = (typeof eliteState !== 'undefined' && eliteState && !!eliteState.elite);
@@ -6048,10 +7546,14 @@ function syncDigestSubscription() {
         }
         var saved = getSaved();
         var allUnis = (typeof UNI !== 'undefined') ? UNI : [];
+        // Resolve across countries (UNI only holds the current one) via the registry.
         var names = saved.map(function (id) {
-            var u = allUnis.find(function (x) { return x.id === id; });
+            var u = allUnis.find(function (x) { return x.id === id; }) ||
+                    (window.uniFromRegistry && window.uniFromRegistry(id));
             return u ? (u.name || u.title) : null;
         }).filter(Boolean);
+        // Data not loaded yet — don't overwrite the server's list with an empty one.
+        if (saved.length && !names.length) return;
         var country = (typeof currentCountryCode !== 'undefined' && currentCountryCode) ? currentCountryCode : null;
         payFetch('/api/digest/subscribe', {
             method: 'POST', headers: { 'content-type': 'application/json' },
@@ -6070,7 +7572,7 @@ try { syncDigestSubscription(); } catch (e) {}
         var on = digestEnabled();
         t.checked = on;
         if (lbl) lbl.textContent = on
-            ? 'On — a weekly round-up of news about your saved universities.'
+            ? 'On — checked every 2 days; you only get an email when your saved universities have something new.'
             : 'Off — you won\'t get the weekly news email.';
     }
     if (!user || !user.email) { t.disabled = true; if (lbl) lbl.textContent = 'Sign in with an email to receive the weekly news email.'; return; }
@@ -6083,6 +7585,7 @@ try { syncDigestSubscription(); } catch (e) {}
 }());
 
 var eliteState = { elite: false, status: 'none', currentPeriodEnd: null, cancelAtPeriodEnd: false, cardBrand: null, cardLast4: null };
+var eliteKnown = false;   // true once the server (or the admin rule) has answered
 
 function isElite() { return !!eliteState.elite; }
 
@@ -6130,6 +7633,7 @@ function refreshEliteStatus(cb) {
     if (isAdminAccount()) {
         eliteState.elite = true;
         eliteState.status = 'granted';
+        eliteKnown = true;
         applyEliteUI();
         try { syncDigestSubscription(); } catch (e) {}
         if (cb) cb(eliteState);
@@ -6145,6 +7649,7 @@ function refreshEliteStatus(cb) {
                 elite: !!d.elite, status: d.status, currentPeriodEnd: d.currentPeriodEnd,
                 cancelAtPeriodEnd: !!d.cancelAtPeriodEnd, cardBrand: d.cardBrand, cardLast4: d.cardLast4
             };
+            eliteKnown = true;
             applyEliteUI();
             // Elite status is now known — (un)subscribe to the daily digest accordingly.
             try { syncDigestSubscription(); } catch (e) {}
@@ -6307,7 +7812,12 @@ function showCheckoutBanner(kind) {
             visited:     visited.length,
             friends:     (typeof getFriends === 'function' ? getFriends() : []).length,
             apps:        (typeof getFormApps === 'function' ? getFormApps() : []).length,
-            elite:       (typeof eliteState !== 'undefined' && eliteState && !!eliteState.elite)
+            elite:       (typeof eliteState !== 'undefined' && eliteState && !!eliteState.elite),
+            subjects:    (function () { try { var g = JSON.parse(localStorage.getItem('us_gradebook_' + user.id) || 'null'); return g && g.subjects ? g.subjects.length : 0; } catch (e) { return 0; } })(),
+            schSaved:    (function () { try { return (JSON.parse(localStorage.getItem('us_sch_saved_' + user.id) || '[]') || []).length; } catch (e) { return 0; } })(),
+            carSaved:    (function () { try { return (JSON.parse(localStorage.getItem('us_car_saved_' + user.id) || '[]') || []).length; } catch (e) { return 0; } })(),
+            outcomes:    parseInt(localStorage.getItem('us_outcomes_shared_' + user.id) || '0', 10) || 0,
+            streakBest:  (function () { try { var t = JSON.parse(localStorage.getItem('us_streak_' + user.id) || 'null'); return t ? Math.max(t.best || 0, t.count || 0) : 0; } catch (e) { return 0; } })()
         };
     }
 
@@ -6317,28 +7827,38 @@ function showCheckoutBanner(kind) {
           check:function(s){ return true; },                goal:function(){ return 'Available'; } },
         { id:'seeker',     tier:2,  name:'Risen Seeker',     icon:'fa-compass',             how:'Save 10 universities',
           check:function(s){ return s.saved >= 10; },       goal:function(s){ return Math.min(s.saved,10)+'/10'; } },
-        { id:'instinct',   tier:3,  name:'Sharpened Instinct',icon:'fa-eye',                how:'Run 3 head-to-head comparisons',
+        { id:'scholarmark',tier:3,  name:"Scholar's Mark",   icon:'fa-book-open-reader',    how:'Add 5 subjects to your Gradebook',
+          check:function(s){ return s.subjects >= 5; },     goal:function(s){ return Math.min(s.subjects||0,5)+'/5'; } },
+        { id:'instinct',   tier:4,  name:'Sharpened Instinct',icon:'fa-eye',                how:'Run 3 head-to-head comparisons',
           check:function(s){ return s.comparisons >= 3; },  goal:function(s){ return Math.min(s.comparisons,3)+'/3'; } },
-        { id:'oracle',     tier:4,  name:"Oracle's Vessel",  icon:'fa-wand-magic-sparkles', how:'Ask 5 questions in Ask AI',
+        { id:'fortune',    tier:5,  name:'Fortune Hunter',   icon:'fa-gem',                 how:'Save 3 scholarships',
+          check:function(s){ return s.schSaved >= 3; },     goal:function(s){ return Math.min(s.schSaved||0,3)+'/3'; } },
+        { id:'trailblazer',tier:6,  name:'Trailblazer',      icon:'fa-flag-checkered',      how:'Share an admission result',
+          check:function(s){ return s.outcomes >= 1; },     goal:function(s){ return Math.min(s.outcomes||0,1)+'/1'; } },
+        { id:'oracle',     tier:7,  name:"Oracle's Vessel",  icon:'fa-wand-magic-sparkles', how:'Ask 5 questions in Ask AI',
           check:function(s){ return s.aiQ >= 5; },          goal:function(s){ return Math.min(s.aiQ,5)+'/5'; } },
-        { id:'timesever',  tier:5,  name:'Time Severer',     icon:'fa-hourglass-half',      how:'Complete 3 application deadlines',
+        { id:'pathfinder', tier:8,  name:'Pathfinder',       icon:'fa-route',               how:'Save 3 companies in Career paths',
+          check:function(s){ return s.carSaved >= 3; },     goal:function(s){ return Math.min(s.carSaved||0,3)+'/3'; } },
+        { id:'timesever',  tier:9,  name:'Time Severer',     icon:'fa-hourglass-half',      how:'Complete 3 application deadlines',
           check:function(s){ return s.dlDone >= 3; },       goal:function(s){ return Math.min(s.dlDone,3)+'/3'; } },
-        { id:'worldender', tier:6,  name:'World Ender',      icon:'fa-earth-americas',      how:'Explore 6 different countries',
+        { id:'flame',      tier:10,  name:'Undying Flame',    icon:'fa-fire-flame-curved',   how:'Keep a 7-day streak',
+          check:function(s){ return s.streakBest >= 7; },   goal:function(s){ return Math.min(s.streakBest||0,7)+'/7'; } },
+        { id:'worldender', tier:11, name:'World Ender',      icon:'fa-earth-americas',      how:'Explore 6 different countries',
           check:function(s){ return s.visited >= 6; },      goal:function(s){ return Math.min(s.visited,6)+'/6'; } },
-        { id:'soulbond',   tier:7,  name:'Soul-Bonded',      icon:'fa-user-group',          how:'Add 3 friends',
+        { id:'soulbond',   tier:12, name:'Soul-Bonded',      icon:'fa-user-group',          how:'Add 3 friends',
           check:function(s){ return s.friends >= 3; },      goal:function(s){ return Math.min(s.friends,3)+'/3'; } },
-        { id:'strategist', tier:8,  name:'Grand Strategist', icon:'fa-chess-knight',        how:'Submit an application via the AI Assistant',
+        { id:'strategist', tier:13, name:'Grand Strategist', icon:'fa-chess-knight',        how:'Submit an application via the AI Assistant',
           check:function(s){ return s.apps >= 1; },         goal:function(s){ return Math.min(s.apps,1)+'/1'; } },
-        { id:'elite',      tier:9,  name:'Elite',            icon:'fa-crown',               how:'Unlocked with an Elite subscription',
+        { id:'elite',      tier:14, name:'Elite',            icon:'fa-crown',               how:'Unlocked with an Elite subscription',
           check:function(s){ return s.elite; },             goal:function(s){ return (s.elite?1:0)+'/1'; } },
-        { id:'transcend',  tier:10, name:'Transcendent',     icon:'fa-dragon',              how:'Earn every other title',
+        { id:'transcend',  tier:15, name:'Transcendent',     icon:'fa-dragon',              how:'Earn every other title',
           check:function(){ return false; },                goal:function(){ return ''; } } // computed below
     ];
 
     var TCOLORS = {
-        novice:'#27ae60', seeker:'#2ecc71', instinct:'#3498db', oracle:'#9b59b6',
-        timesever:'#1abc9c', worldender:'#e67e22', soulbond:'#e84393', strategist:'#e74c3c',
-        elite:'#f1c40f', transcend:'#d63af0'
+        novice:'#27ae60', seeker:'#2ecc71', scholarmark:'#0ea5e9', instinct:'#3498db', fortune:'#c58b06', oracle:'#9b59b6',
+        pathfinder:'#6366f1', trailblazer:'#0f8f7e', timesever:'#1abc9c', flame:'#f2551d', worldender:'#e67e22', soulbond:'#e84393', strategist:'#e74c3c',
+        elite:'#e0a800', transcend:'#d63af0'
     };
     function titleColor(id) { return TCOLORS[id] || '#d97c14'; }
     function hexA(hex, a) {
@@ -6377,12 +7897,11 @@ function showCheckoutBanner(kind) {
 
         // Cool pill look: subtle gradient + matching border + soft colour glow + crisp text.
         function pill(el, withSpan) {
-            el.style.color = col;
-            el.style.background = 'linear-gradient(135deg, ' + hexA(col, .24) + ', ' + hexA(col, .07) + ')';
-            el.style.borderColor = hexA(col, .42);
-            el.style.boxShadow = '0 2px 10px ' + hexA(col, .28) + ', inset 0 1px 0 rgba(255,255,255,.25)';
-            el.style.textShadow = '0 1px 1px rgba(0,0,0,.12)';
-            el.innerHTML = '<i class="fa-solid ' + t.icon + '"></i> ' + (withSpan ? '<span>' + t.name + '</span>' : t.name);
+            ['color', 'background', 'borderColor', 'boxShadow', 'textShadow'].forEach(function (k) { el.style[k] = ''; });
+            el.style.setProperty('--tc', col);
+            el.classList.add('ttl-chip');
+            el.innerHTML = '<span class="ttl-chip__ic"><i class="fa-solid ' + t.icon + '"></i></span>' + (withSpan ? '<span>' + t.name + '</span>' : '<span>' + t.name + '</span>') +
+                (el.id === 'mpHeroTitle' ? '<em>Tier ' + t.tier + '</em>' : '');
         }
         if (chip) {
             if (t) { chip.style.display = 'inline-flex'; pill(chip, false); }
@@ -6411,21 +7930,24 @@ function showCheckoutBanner(kind) {
         var grid = document.getElementById('ttlGrid');
         var countEl = document.getElementById('ttlEarnedCount');
         if (countEl) countEl.textContent = ev.earnedCount;
+        var totEl = document.getElementById('ttlTotal'); if (totEl) totEl.textContent = ev.res.length;
+        var barEl = document.getElementById('ttlBar'); if (barEl) barEl.style.setProperty('--p', (ev.earnedCount / ev.res.length).toFixed(3));
         if (!grid) return;
         var eqId = getEquipped();
         var activeId = activeTitle() ? activeTitle().id : null;
-        grid.innerHTML = ev.res.map(function(r) {
+        grid.innerHTML = ev.res.map(function(r, idx) {
             var t = r.t;
             var earned = r.earned;
             var isOn = (t.id === (eqId || activeId)) && earned;
             var action = earned
                 ? '<button class="ttl__equip__btn' + (isOn ? ' ttl__equip__btn--on' : '') + '" data-title="' + t.id + '"' + (isOn ? ' disabled' : '') + '>' + (isOn ? '<i class="fa-solid fa-check"></i> Equipped' : 'Equip') + '</button>'
                 : '<i class="fa-solid fa-lock ttl__card__lockicon"></i>';
+            var g = t.goal(ev.stats), m = /^(\d+)\/(\d+)$/.exec(g || ''), frac = m ? Math.min(1, +m[1] / +m[2]) : 0;
             var how = earned
                 ? '<div class="ttl__card__how ttl__card__how--done"><i class="fa-solid fa-circle-check"></i> Awakened</div>'
-                : '<div class="ttl__card__how"><i class="fa-solid fa-arrow-right"></i> ' + t.how + (t.goal({}) !== '' ? ' &middot; ' + t.goal(ev.stats) : '') + '</div>';
-            var iconStyle = earned ? ' style="background:' + titleColor(t.id) + '"' : '';
-            return '<div class="ttl__card ttl__card--' + (earned ? 'earned' : 'locked') + '">' +
+                : (m ? '<div class="ttl__card__prog"><i style="--p:' + frac.toFixed(3) + '"></i><span>' + g + '</span></div>' : '<div class="ttl__card__how"><i class="fa-solid fa-lock"></i> Locked</div>');
+            var iconStyle = '';
+            return '<div class="ttl__card ttl__card--' + (earned ? 'earned' : 'locked') + '" style="--tc:' + titleColor(t.id) + ';--n:' + idx + '">' +
                 '<div class="ttl__card__icon"' + iconStyle + '><i class="fa-solid ' + t.icon + '"></i></div>' +
                 '<div class="ttl__card__body">' +
                     '<div class="ttl__card__name">' + t.name + ' <span class="ttl__card__tier">Tier ' + t.tier + '</span></div>' +
@@ -6469,6 +7991,7 @@ function showCheckoutBanner(kind) {
         { key:'apply',     sel:'.apf__hero__img',   type:'img', def:'images/Gogo.avif'  },
         { key:'chances',   sel:'.ins__hero__photo', type:'img', def:'images/Suguro.jpg' },
         { key:'deadlines', sel:'.dl__hero__img',     type:'img', def:'images/DemonSlayer.jpeg' },
+        { key:'overview',  sel:'.ovn__img',          type:'img', def:'images/DemonSlayer.jpeg' },
         { key:'matcher',   sel:'.fy__hero__img',     type:'img', def:'images/Paris.avif' }
     ];
     var DL_OVERLAY = 'linear-gradient(120deg, rgba(0,0,0,.66) 0%, rgba(0,0,0,.4) 55%, rgba(0,0,0,.25) 100%)';
@@ -6617,6 +8140,12 @@ function showCheckoutBanner(kind) {
     function renderAccounts() {
         var box = document.getElementById('mpdAccounts');
         if (!box) return;
+        // Switch-account is admin-only (Vanyochek) — hide the whole section otherwise.
+        var admin = (typeof isAdminAccount === 'function') && isAdminAccount();
+        var sect = document.getElementById('mpdSwitchSection'), sdiv = document.getElementById('mpdSwitchDivider');
+        if (sect) sect.style.display = admin ? '' : 'none';
+        if (sdiv) sdiv.style.display = admin ? '' : 'none';
+        if (!admin) return;
         var all = allUsers();
         if (!all.length) { box.innerHTML = '<div style="font-size:11px;color:var(--text3)">No other accounts on this device.</div>'; return; }
 
@@ -6714,7 +8243,7 @@ function showCheckoutBanner(kind) {
     var hdrBtn = document.getElementById('fyHdrBtn');
     if (!fab || !overlay) return;
 
-    var sel = { subjects: [], hobbies: [], priorities: [] };
+    var sel = { subjects: [], hobbies: [], priorities: [], countries: [] };
 
     function buildChips(containerId, list, bucket) {
         var box = document.getElementById(containerId);
@@ -6728,6 +8257,141 @@ function showCheckoutBanner(kind) {
             });
         });
     }
+
+    // Broad option pools searched by the subject/hobby pickers (the visible chips
+    // stay short to save space; everything else is found by typing).
+    var SUBJECTS_ALL = ['Business','Computer Science','Engineering','Medicine','Law','Humanities','Science','Arts',
+        'Economics','Psychology','Architecture','Mathematics','Social Sciences','Education','Design','Biology','Chemistry',
+        'Physics','Nursing','Pharmacy','Dentistry','Veterinary Medicine','Finance','Accounting','Marketing','Management',
+        'Political Science','International Relations','Philosophy','History','Geography','Linguistics','Languages','Literature',
+        'Journalism','Communications','Media Studies','Film','Music','Fine Arts','Sociology','Anthropology','Environmental Science',
+        'Data Science','Artificial Intelligence','Cybersecurity','Software Engineering','Civil Engineering','Mechanical Engineering',
+        'Electrical Engineering','Aerospace Engineering','Biomedical Engineering','Chemical Engineering','Statistics','Astronomy',
+        'Geology','Neuroscience','Public Health','Nutrition','Sports Science','Tourism','Hospitality','Agriculture','Criminology',
+        'Theology','Archaeology','Robotics','Game Design','Fashion Design','Interior Design','Urban Planning','Biotechnology'];
+    var HOBBIES_ALL = HOBBIES.concat(['Photography','Cooking','Dancing','Writing','Painting','Cinema','Podcasts','Yoga',
+        'Hiking','Cycling','Board games','Chess','Coding','Robotics','Astronomy','Fashion','DIY','Gardening','Theatre',
+        'Singing','Investing','Blogging','Streaming','Skateboarding','Surfing','Climbing','Running','Meditation','Languages',
+        'Collecting','Animation','3D printing','Calligraphy']);
+
+    // ── Reusable searchable chip picker ──
+    // Inline, no popover: the chips area shows the user's selected chips (removable)
+    // followed by up to 3 suggestion chips (paginated) — the user can click a
+    // suggestion OR type in the small search box on the right to filter the pool.
+    function ChipPicker(cfg) {
+        var chipsEl = document.getElementById(cfg.chipsId);
+        var input   = document.getElementById(cfg.inputId);
+        if (!chipsEl || !input) return null;
+        var bucket = cfg.bucket;
+        var PAGE = cfg.pageSize || 3;
+        var query = '', page = 0;
+
+        function esc(s) { return String(s).replace(/"/g, '&quot;'); }
+        function suggestions() {
+            var q = query.trim().toLowerCase();
+            var taken = sel[bucket];
+            return cfg.pool.filter(function (o) {
+                if (taken.indexOf(o) !== -1) return false;
+                return !q || o.toLowerCase().indexOf(q) !== -1;
+            });
+        }
+        function renderChips(animate) {
+            var html = '';
+            sel[bucket].forEach(function (o) {
+                html += '<span class="fy__chip is-on fy__chip--rm" data-rm="' + esc(o) + '">' + o + ' <i class="fa-solid fa-xmark"></i></span>';
+            });
+            var sug = suggestions();
+            var pages = Math.max(1, Math.ceil(sug.length / PAGE));
+            if (page > pages - 1) page = pages - 1;
+            if (page < 0) page = 0;
+            var anim = animate ? ' anim' : '';
+            sug.slice(page * PAGE, page * PAGE + PAGE).forEach(function (o, i) {
+                html += '<span class="fy__chip fy__chip--sug' + anim + '" style="--i:' + i + '" data-add="' + esc(o) + '"><i class="fa-solid fa-plus"></i> ' + o + '</span>';
+            });
+            if (sug.length > PAGE) {
+                html += '<span class="fy__pick__pager">' +
+                    '<button type="button" class="fy__pick__pg" data-pg="prev"' + (page === 0 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-left"></i></button>' +
+                    '<button type="button" class="fy__pick__pg" data-pg="next"' + (page >= pages - 1 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-right"></i></button>' +
+                '</span>';
+            }
+            if (!sel[bucket].length && !sug.length) html += '<span class="fy__pick__none">No matches — try another word</span>';
+            chipsEl.innerHTML = html;
+            chipsEl.querySelectorAll('[data-add]').forEach(function (el) { el.addEventListener('click', function () { add(el.dataset.add); }); });
+            chipsEl.querySelectorAll('[data-rm]').forEach(function (el) { el.addEventListener('click', function () { remove(el.dataset.rm); }); });
+            chipsEl.querySelectorAll('.fy__pick__pg').forEach(function (b) { b.addEventListener('click', function () { if (b.disabled) return; page += (b.dataset.pg === 'next' ? 1 : -1); renderChips(true); }); });
+        }
+        function add(v) { if (sel[bucket].indexOf(v) === -1) sel[bucket].push(v); renderChips(false); input.focus(); }
+        function remove(v) { var i = sel[bucket].indexOf(v); if (i !== -1) sel[bucket].splice(i, 1); renderChips(false); }
+
+        input.addEventListener('input', function () { query = input.value; page = 0; renderChips(false); });
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') { e.preventDefault(); var s = suggestions(); if (s.length) { add(s[page * PAGE] || s[0]); query = ''; input.value = ''; page = 0; renderChips(false); } }
+        });
+        // reveal animation: suggestions stagger in when the search box gains focus
+        var pickEl = chipsEl.closest('.fy__pick');
+        input.addEventListener('focus', function () { if (pickEl) pickEl.classList.add('is-focused'); renderChips(true); });
+        input.addEventListener('blur', function () { if (pickEl) pickEl.classList.remove('is-focused'); });
+
+        renderChips(true);
+        return { refresh: function () { query = ''; page = 0; input.value = ''; renderChips(true); } };
+    }
+
+    // ── Custom select (replaces the ugly native dropdown, keeps it as the value source) ──
+    function enhanceSelect(native) {
+        if (!native || native.__enhanced) return;
+        native.__enhanced = true;
+        var wrap = document.createElement('div');
+        wrap.className = 'fy__sel';
+        native.parentNode.insertBefore(wrap, native);
+        wrap.appendChild(native);
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'fy__sel__btn';
+        var pop = document.createElement('div');
+        pop.className = 'fy__sel__pop';
+        pop.hidden = true;
+        wrap.appendChild(btn);
+        wrap.appendChild(pop);
+
+        function label() { var o = native.options[native.selectedIndex]; return o ? o.text : ''; }
+        function renderBtn() { btn.innerHTML = '<span>' + label() + '</span><i class="fa-solid fa-chevron-down fy__sel__caret"></i>'; }
+        function renderPop() {
+            pop.innerHTML = Array.prototype.map.call(native.options, function (o, i) {
+                return '<div class="fy__sel__opt' + (i === native.selectedIndex ? ' is-sel' : '') + '" data-i="' + i + '">' + o.text + '</div>';
+            }).join('');
+        }
+        function close() { pop.hidden = true; wrap.classList.remove('is-open', 'fy__sel--up'); }
+        function open() {
+            document.querySelectorAll('.fy__sel.is-open').forEach(function (w) { if (w.__close) w.__close(); });
+            renderPop(); pop.hidden = false; wrap.classList.add('is-open');
+            // Flip the dropdown upward when there isn't room below (so tall lists
+            // like Sport don't get clipped by the scroll container / viewport).
+            var rect = btn.getBoundingClientRect();
+            var popH = Math.min(260, native.options.length * 38 + 12);
+            var spaceBelow = window.innerHeight - rect.bottom;
+            wrap.classList.toggle('fy__sel--up', spaceBelow < popH + 16 && rect.top > spaceBelow);
+        }
+        wrap.__close = close;
+        btn.addEventListener('click', function (e) { e.stopPropagation(); if (pop.hidden) open(); else close(); });
+        pop.addEventListener('click', function (e) {
+            var o = e.target.closest('.fy__sel__opt'); if (!o) return;
+            native.selectedIndex = +o.dataset.i;
+            native.dispatchEvent(new Event('change', { bubbles: true }));
+            renderBtn(); close();
+        });
+        native.addEventListener('change', renderBtn);
+        renderBtn();
+    }
+    // one global outside-click closes any open custom select
+    document.addEventListener('click', function () {
+        document.querySelectorAll('.fy__sel.is-open').forEach(function (w) { if (w.__close) w.__close(); });
+    });
+    function enhanceAllSelects() {
+        var form = document.getElementById('fyForm');
+        if (form) form.querySelectorAll('select').forEach(enhanceSelect);
+    }
+
+    var subjectPicker = null, hobbyPicker = null;
     function fillSports() {
         var s = document.getElementById('fySport');
         if (s) s.innerHTML = '<option value="">None</option>' + SPORTS.map(function(x){ return '<option>' + x + '</option>'; }).join('');
@@ -6735,11 +8399,38 @@ function showCheckoutBanner(kind) {
 
     var budgetSlider = document.getElementById('fyBudget');
     var budgetVal = document.getElementById('fyBudgetVal');
+    function paintSlider(slider) {
+        var pct = (slider.value - slider.min) / (slider.max - slider.min) * 100;
+        slider.style.setProperty('--pct', pct + '%');
+    }
     function syncBudget() {
-        var v = +budgetSlider.value;
-        budgetVal.textContent = '€' + v.toLocaleString() + '/yr';
-        var pct = (v - budgetSlider.min) / (budgetSlider.max - budgetSlider.min) * 100;
-        budgetSlider.style.setProperty('--pct', pct + '%');
+        budgetVal.textContent = '€' + (+budgetSlider.value).toLocaleString() + '/yr';
+        paintSlider(budgetSlider);
+    }
+
+    // Value-label formatters for the extra sliders. Each shows a friendly "no
+    // limit / any" state at its default so it reads as inactive until moved.
+    var EXTRA_SLIDERS = {
+        fyMaxTuition: { val: 'fyMaxTuitionVal', fmt: function (v) { return v >= 40000 ? 'No limit' : '€' + v.toLocaleString() + '/yr'; } },
+        fyLiving:     { val: 'fyLivingVal',     fmt: function (v) { return v >= 2500 ? 'No limit' : '€' + v.toLocaleString() + '/mo'; } },
+        fyAccept:     { val: 'fyAcceptVal',     fmt: function (v) { return v <= 0 ? 'Any' : '≥ ' + v + '%'; } },
+        fyEmployer:   { val: 'fyEmployerVal',   fmt: function (v) { return v <= 0 ? 'Any' : '≥ ' + v + '%'; } },
+        fySalary:     { val: 'fySalaryVal',     fmt: function (v) { return v <= 0 ? 'Any' : '≥ €' + v.toLocaleString() + '/yr'; } }
+    };
+    function syncExtraSlider(id) {
+        var s = document.getElementById(id), cfg = EXTRA_SLIDERS[id];
+        if (!s || !cfg) return;
+        var lbl = document.getElementById(cfg.val);
+        if (lbl) lbl.textContent = cfg.fmt(+s.value);
+        paintSlider(s);
+    }
+    function initExtraSliders() {
+        Object.keys(EXTRA_SLIDERS).forEach(function (id) {
+            var s = document.getElementById(id);
+            if (!s) return;
+            syncExtraSlider(id);
+            s.addEventListener('input', function () { syncExtraSlider(id); });
+        });
     }
 
     // Destination countries the matcher will pull universities from (saved favourites).
@@ -6761,15 +8452,18 @@ function showCheckoutBanner(kind) {
         var list = destCountries();
         box.innerHTML = '<i class="fa-solid fa-earth-europe" style="color:var(--orange)"></i> Matching across your destinations: ' +
             list.map(function(c){ return '<span class="fi fi-' + c + '"></span>'; }).join('');
+        buildCountryChips();   // keep the Location > Countries chips in sync with destinations
     }
 
     function loadPrefs() {
         var p = {}; try { p = getProfile().matchPrefs || {}; } catch (e) {}
         sel.subjects = p.subjects || []; sel.hobbies = p.hobbies || []; sel.priorities = p.priorities || [];
-        ['fySubjects:subjects','fyHobbies:hobbies','fyPriorities:priorities'].forEach(function(pair) {
-            var parts = pair.split(':'), box = document.getElementById(parts[0]);
-            if (box) box.querySelectorAll('.fy__chip').forEach(function(c) { if (sel[parts[1]].indexOf(c.dataset.v) !== -1) c.classList.add('is-on'); });
-        });
+        sel.countries = p.countries || [];
+        if (subjectPicker) subjectPicker.refresh();
+        if (hobbyPicker) hobbyPicker.refresh();
+        var pri = document.getElementById('fyPriorities');
+        if (pri) pri.querySelectorAll('.fy__chip').forEach(function(c) { if (sel.priorities.indexOf(c.dataset.v) !== -1) c.classList.add('is-on'); });
+        buildCountryChips();   // reflects sel.countries against current destinations
         if (p.avg != null) document.getElementById('fyAvg').value = p.avg;
         if (p.exp != null) document.getElementById('fyExp').value = p.exp;
         if (p.lang) document.getElementById('fyLang').value = p.lang;
@@ -6778,13 +8472,23 @@ function showCheckoutBanner(kind) {
         if (p.sport) document.getElementById('fySport').value = p.sport;
         if (p.athlete != null) document.getElementById('fyAthlete').value = p.athlete;
         if (p.budget) budgetSlider.value = p.budget;
+        // new filters
+        var setIf = function (id, v) { var e = document.getElementById(id); if (e && v != null) e.value = v; };
+        setIf('fyMaxTuition', p.maxTuition); setIf('fyLiving', p.maxLiving); setIf('fyRank', p.rankTier);
+        setIf('fyAccept', p.minAccept); setIf('fyEmployer', p.minEmployer); setIf('fySalary', p.minSalary);
         syncBudget();
+        Object.keys(EXTRA_SLIDERS).forEach(syncExtraSlider);
+        // refresh custom-select button labels to the restored values
+        var form = document.getElementById('fyForm');
+        if (form) form.querySelectorAll('select').forEach(function (s) { s.dispatchEvent(new Event('change', { bubbles: true })); });
     }
     function savePrefs(prefs) { try { var pr = getProfile(); pr.matchPrefs = prefs; setProfile(pr); } catch (e) {} }
 
+    function numVal(id, dflt) { var e = document.getElementById(id); return e ? (+e.value) : dflt; }
     function readPrefs() {
         return {
             subjects: sel.subjects.slice(), hobbies: sel.hobbies.slice(), priorities: sel.priorities.slice(),
+            countries: sel.countries.slice(),
             avg: +document.getElementById('fyAvg').value || null,
             exp: +document.getElementById('fyExp').value || null,
             lang: document.getElementById('fyLang').value,
@@ -6792,7 +8496,14 @@ function showCheckoutBanner(kind) {
             vibe: document.getElementById('fyVibe').value,
             sport: document.getElementById('fySport').value,
             athlete: +document.getElementById('fyAthlete').value || 0,
-            budget: +budgetSlider.value
+            budget: +budgetSlider.value,
+            // new filters
+            maxTuition: numVal('fyMaxTuition', 40000),
+            maxLiving:  numVal('fyLiving', 2500),
+            rankTier:   numVal('fyRank', 0),
+            minAccept:  numVal('fyAccept', 0),
+            minEmployer: numVal('fyEmployer', 0),
+            minSalary:  numVal('fySalary', 0)
         };
     }
 
@@ -6800,6 +8511,123 @@ function showCheckoutBanner(kind) {
     function reqGrade(diff) { return ({ 5: 90, 4: 80, 3: 70, 2: 60, 1: 50 })[diff] || 65; }
     function uniCost(u) { return (typeof tuitionMinCost === 'function' ? tuitionMinCost(u) : (TS_COST[u.ts] || 0)); }
     function tuitionText(u) { return (typeof u.tuition === 'string' && u.tuition.length > 1) ? u.tuition : ('~€' + (TS_COST[u.ts] || 0).toLocaleString() + '/yr'); }
+
+    // ── Derived metrics for the extra filters ──
+    // The university dataset has no explicit ranking / acceptance / salary fields,
+    // so these are transparent heuristics from what we do have (difficulty tier,
+    // size, subjects, country). They power the new Academic/Costs/Career filters.
+    var LIVING_MONTHLY = { es: 900, pt: 800, it: 950, fr: 1100, de: 1050, gb: 1400, ie: 1350,
+        us: 1600, ch: 1900, ua: 600, nl: 1200, be: 1050, dk: 1300, se: 1200, fi: 1100 };
+    var SALARY_BASE = { us: 65000, ch: 85000, gb: 38000, de: 48000, nl: 44000, se: 42000, dk: 46000,
+        fi: 42000, ie: 45000, fr: 38000, be: 42000, it: 30000, es: 28000, pt: 26000, ua: 15000 };
+    var HIGH_EARN = ['computer', 'engineer', 'medic', 'business', 'law', 'econom', 'finance', 'data', 'architect'];
+    var EMPLOYABLE = ['business', 'computer', 'engineer', 'econom', 'law', 'finance', 'data'];
+    var CAREER_HUBS = ['gb', 'us', 'de', 'fr', 'ch', 'nl'];
+
+    function livingMonthly(code) { return LIVING_MONTHLY[code] || 1000; }
+    function acceptanceRate(u) { return ({ 5: 9, 4: 22, 3: 45, 2: 65, 1: 82 })[u.diff || 3] || 45; }
+    function fieldsHit(u, list) {
+        var fields = (u.fields || []).map(function (f) { return f.toLowerCase(); });
+        return list.some(function (kw) { return fields.some(function (f) { return f.indexOf(kw) !== -1; }); });
+    }
+    function gradSalary(u, code) {
+        var base = SALARY_BASE[code] || 32000;
+        var mult = fieldsHit(u, HIGH_EARN) ? 1.25 : 1;
+        var diffBoost = 1 + (((u.diff || 3) - 3) * 0.08);
+        return Math.round(base * mult * diffBoost / 1000) * 1000;
+    }
+    function employerMatch(u, code) {
+        var m = 45 + (((u.diff || 3) - 3) * 10);
+        var students = parseStudents(u);
+        if (students >= 25000) m += 8; else if (students >= 15000) m += 4;
+        if (fieldsHit(u, EMPLOYABLE)) m += 10;
+        if (CAREER_HUBS.indexOf(code) !== -1) m += 6;
+        return Math.max(20, Math.min(98, Math.round(m)));
+    }
+
+    // Build the Location > Countries chips from the user's saved destinations.
+    function buildCountryChips() {
+        var box = document.getElementById('fyCountries');
+        if (!box) return;
+        var codes = destCountries();
+        // keep any previously-selected codes that are still valid destinations
+        sel.countries = sel.countries.filter(function (c) { return codes.indexOf(c) !== -1; });
+        box.innerHTML = codes.map(function (c) {
+            return '<span class="fy__chip fy__chip--country' + (sel.countries.indexOf(c) !== -1 ? ' is-on' : '') +
+                '" data-c="' + c + '"><span class="fi fi-' + c + '"></span> ' + countryName(c) + '</span>';
+        }).join('');
+        box.querySelectorAll('.fy__chip').forEach(function (chip) {
+            chip.addEventListener('click', function () {
+                var c = chip.dataset.c, i = sel.countries.indexOf(c);
+                if (i === -1) { sel.countries.push(c); chip.classList.add('is-on'); }
+                else { sel.countries.splice(i, 1); chip.classList.remove('is-on'); }
+            });
+        });
+    }
+
+    // ── Soft matching ──
+    // A single unmet slider used to delete a university outright, which is why so
+    // little ever matched. Instead we measure HOW FAR each criterion is missed and
+    // turn that into a penalty (0 = met everything, 1 = wildly off). Only an
+    // explicit country choice, or a drastic all-round miss, removes a university —
+    // everything else survives as a "might match" with a lower percentage.
+    var DROP_PENALTY = 0.9;   // basically nothing in common with what you asked for
+
+    function missPenalty(u, code, rank, p) {
+        var pen = 0, misses = [];
+        // how badly `actual` overshoots `limit` (or undershoots `need`), capped at 1
+        function over(actual, limit)  { return limit > 0 ? Math.min(1, (actual - limit) / limit) : 0; }
+        function under(actual, need)  { return need  > 0 ? Math.min(1, (need - actual) / need)  : 0; }
+
+        if (p.maxTuition < 40000) {
+            var cost = uniCost(u);
+            if (cost > p.maxTuition) { pen += over(cost, p.maxTuition) * 0.30; misses.push('tuition above your cap'); }
+        }
+        if (p.maxLiving < 2500) {
+            var live = livingMonthly(code);
+            if (live > p.maxLiving) { pen += over(live, p.maxLiving) * 0.18; misses.push('living cost above your cap'); }
+        }
+        if (p.rankTier > 0 && rank > p.rankTier) {
+            pen += Math.min(1, (rank - p.rankTier) / (p.rankTier * 2)) * 0.22; misses.push('ranked below your target');
+        }
+        if (p.minAccept > 0) {
+            var acc = acceptanceRate(u);
+            if (acc < p.minAccept) { pen += under(acc, p.minAccept) * 0.22; misses.push('harder to get into than you wanted'); }
+        }
+        if (p.minEmployer > 0) {
+            var emp = employerMatch(u, code);
+            if (emp < p.minEmployer) { pen += under(emp, p.minEmployer) * 0.18; misses.push('less recruiter reach'); }
+        }
+        if (p.minSalary > 0) {
+            var sal = gradSalary(u, code);
+            if (sal < p.minSalary) { pen += under(sal, p.minSalary) * 0.18; misses.push('lower graduate salary'); }
+        }
+        return { pen: Math.min(1, pen), misses: misses };
+    }
+
+    // Returns [{ u, pen, misses }] — the survivors, each carrying how far off it is.
+    function applyFilters(list, code, p) {
+        var out = [];
+        (list || []).forEach(function (u, i) {
+            // Countries are an explicit choice, so they stay a hard filter.
+            if (p.countries && p.countries.length && p.countries.indexOf(code) === -1) return;
+            var m = missPenalty(u, code, i + 1, p);
+            if (m.pen >= DROP_PENALTY) return;
+            out.push({ u: u, pen: m.pen, misses: m.misses });
+        });
+        return out;
+    }
+
+    // Blend the fit score with the soft-filter penalty into a final match %.
+    function matchPct(basePct, pen) {
+        return Math.max(20, Math.min(99, Math.round(basePct * (1 - pen * 0.55))));
+    }
+    // 75%+ is a real match; below that it's a maybe.
+    function matchTier(pct) {
+        return pct >= 75 ? { key: 'match',   label: 'Match' }
+             : pct >= 55 ? { key: 'maybe',   label: 'Might match' }
+             :             { key: 'stretch', label: 'Stretch' };
+    }
 
     // How strongly a university supports/rewards athletes (sports scholarships & facilities).
     // Heuristic: USA (NCAA) highest, UK strong, then big/elite universities.
@@ -6893,7 +8721,45 @@ function showCheckoutBanner(kind) {
         // Country (10, always — it's a saved destination)
         add('fa-earth-europe', 'A saved destination', 'Located in ' + countryName(code), 10);
 
-        var pct = 33 * subj + 18 * grade + 18 * bud + 9 * lang + 10 + 5 * extras + athBoost;
+        // ── Interests, talents & career fit (bounded bonus up to ~10) ──
+        // Looks at how the student's hobbies, mind-sports and career priorities line
+        // up with what this specific university is strong at / rewards — so the match
+        // reflects the *whole* person, not just grades and subjects.
+        var interest = 0, iNote = [];
+        // Hobby ↔ programme alignment (studying near what you love)
+        var HOBBY_FIELD = {
+            'Technology': ['computer', 'engineer', 'data', 'software'], 'Coding': ['computer', 'software', 'data'],
+            'Gaming': ['computer', 'game', 'data'], 'Esports': ['computer', 'game', 'media'],
+            'Robotics': ['engineer', 'computer', 'robot'], 'Entrepreneurship': ['business', 'econom', 'management', 'finance'],
+            'Investing': ['finance', 'econom', 'business'], 'Music': ['music', 'art', 'media'], 'Art': ['art', 'design', 'architect'],
+            'Fashion': ['fashion', 'design', 'art'], 'Writing': ['journal', 'literat', 'communic', 'media'],
+            'Nature': ['environment', 'biolog', 'agri', 'geo'], 'Fitness': ['sport', 'health', 'nutrition'],
+            'Astronomy': ['physic', 'astronom', 'space'], 'Reading': ['human', 'literat', 'philos', 'histor']
+        };
+        p.hobbies.forEach(function (h) {
+            var kws = HOBBY_FIELD[h];
+            if (kws && fieldsHit(u, kws)) { interest += 0.16; if (iNote.indexOf(h.toLowerCase()) === -1) iNote.push(h.toLowerCase()); }
+        });
+        // Mind-sports (chess / esports) — rewarded at large or resourced universities
+        // that run competitive teams, clubs and, in some countries, scholarships.
+        var mindSport = p.hobbies.indexOf('Chess') !== -1 || p.hobbies.indexOf('Esports') !== -1 || /chess|esport/i.test(p.sport || '');
+        if (mindSport && (students >= 15000 || (u.diff || 0) >= 4)) {
+            interest += 0.28; iNote.push('chess/esports scene');
+            reasons.push('Strong chess/esports scene');
+        }
+        // Career-priority fit: reward genuine graduate outcomes where it matters most
+        if (p.priorities.indexOf('Employability') !== -1) {
+            var em = employerMatch(u, code);
+            if (em >= 62) { interest += 0.3; iNote.push('graduate employability'); if (em >= 75) reasons.push('Top recruiter target'); }
+        }
+        if (p.priorities.indexOf('Prestige') !== -1 && (u.diff || 0) >= 5) { interest += 0.18; iNote.push('elite prestige'); }
+        interest = Math.min(1, interest);
+        if (iNote.length) {
+            add('fa-wand-magic-sparkles', 'Your interests & talents',
+                'This university fits your ' + iNote.slice(0, 3).join(', '), 10 * interest);
+        }
+
+        var pct = 33 * subj + 18 * grade + 18 * bud + 9 * lang + 10 + 5 * extras + athBoost + 10 * interest;
         pct = Math.max(35, Math.min(99, Math.round(pct)));
         return { pct: pct, reasons: reasons.slice(0, 4), factors: factors, code: code };
     }
@@ -6905,7 +8771,7 @@ function showCheckoutBanner(kind) {
         catch (e) { return 0; }
     };
 
-    function ringColor(p) { return p >= 80 ? '#27ae60' : p >= 60 ? 'var(--orange)' : '#8a909c'; }
+    function ringColor(p) { return p >= 75 ? '#27ae60' : p >= 55 ? 'var(--orange)' : '#8a909c'; }
 
     // little toast
     function fyToast(msg) {
@@ -6937,37 +8803,283 @@ function showCheckoutBanner(kind) {
     // ── Results (5 per page, paginated; hover → Save / Compare) ──
     var lastScored = [];
     var resPage = 0;
-    var RES_PER = 5;
+    var RES_PER = 8;
 
     function cardHtml(r, idx, isTop) {
         var u = r.u;
         var reasons = (r.reasons && r.reasons.length) ? r.reasons : ['General fit'];
+        var tier = matchTier(r.pct);
+        // Say plainly what keeps it below a full match, if anything.
+        var caveat = (r.misses && r.misses.length && r.pct < 75)
+            ? '<div class="fy__card__caveat"><i class="fa-solid fa-circle-exclamation"></i> ' + r.misses.slice(0, 2).join(' · ') + '</div>'
+            : '';
         return '<div class="fy__card' + (isTop ? ' fy__card--top' : '') + '" data-i="' + idx + '" title="See why it fits you">' +
             '<div class="fy__card__actions">' +
                 '<button class="fy__cbtn" data-act="save" data-i="' + idx + '" title="Save"><i class="fa-regular fa-bookmark"></i></button>' +
                 '<button class="fy__cbtn" data-act="compare" data-i="' + idx + '" title="Add to Compare"><i class="fa-solid fa-scale-balanced"></i></button>' +
             '</div>' +
-            '<div class="fy__ring" style="--p:' + r.pct + ';--ringc:' + ringColor(r.pct) + '"><span class="fy__ring__num">' + r.pct + '<span>%</span></span></div>' +
+            '<div class="fy__ring__wrap">' +
+                '<div class="fy__ring" style="--p:' + r.pct + ';--ringc:' + ringColor(r.pct) + '"><span class="fy__ring__num">' + r.pct + '<span>%</span></span></div>' +
+                '<span class="fy__tier fy__tier--' + tier.key + '">' + tier.label + '</span>' +
+            '</div>' +
             '<div class="fy__card__body">' +
-                '<div class="fy__card__name"><span class="fy__card__abbr" style="background:' + (u.color || '#555') + '">' + (u.abbr || (u.name||'U').slice(0,3)) + '</span>' + (u.name || 'University') + '</div>' +
+                '<div class="fy__card__name"><span class="fy__card__abbr fy__card__abbr--logo">' + uniLogo(u, 26) + '</span>' + (u.name || 'University') + '</div>' +
                 '<div class="fy__card__meta"><span class="fy__card__country"><span class="fi fi-' + r.code + '"></span>' + countryName(r.code) + '</span> · ' + (u.city || '') + ' · ' + tuitionText(u) + '</div>' +
                 '<div class="fy__card__reasons">' + reasons.map(function(x){ return '<span class="fy__reason">' + x + '</span>'; }).join('') + '</div>' +
+                caveat +
                 '<div class="fy__card__why"><i class="fa-solid fa-circle-info"></i> See why it fits you</div>' +
             '</div>' +
         '</div>';
     }
 
+    // ══════════ Recommendation helper (shown when nothing matches) ══════════
+    // EVERY filter the user can set becomes a "dimension". `active(p)` decides
+    // whether the user actually chose it, `neutral` is the value it resets to when
+    // relaxed, and `fields` are the pref keys it controls (grades & sport span two).
+    var RECO_DIMS = [
+        { key: 'subjects',    label: 'Favourite subjects', icon: 'fa-book',            fields: ['subjects'],       neutral: { subjects: [] },        active: function (p) { return p.subjects.length > 0; },   desc: function (p) { return p.subjects.slice(0, 3).join(', ') + (p.subjects.length > 3 ? ' +' + (p.subjects.length - 3) : ''); } },
+        { key: 'grades',      label: 'Expected grade',     icon: 'fa-star-half-stroke',fields: ['avg', 'exp'],     neutral: { avg: null, exp: null },active: function (p) { return p.exp != null || p.avg != null; }, desc: function (p) { return (p.exp || p.avg) + '%'; } },
+        { key: 'lang',        label: 'Teaching language',  icon: 'fa-language',        fields: ['lang'],           neutral: { lang: '' },            active: function (p) { return !!p.lang; },                desc: function (p) { return p.lang; } },
+        { key: 'rankTier',    label: 'World ranking',      icon: 'fa-ranking-star',    fields: ['rankTier'],       neutral: { rankTier: 0 },         active: function (p) { return p.rankTier > 0; },          desc: function (p) { return 'Top ' + p.rankTier; } },
+        { key: 'minAccept',   label: 'Acceptance rate',    icon: 'fa-door-open',       fields: ['minAccept'],      neutral: { minAccept: 0 },        active: function (p) { return p.minAccept > 0; },         desc: function (p) { return '≥ ' + p.minAccept + '%'; } },
+        { key: 'budget',      label: 'Yearly budget',      icon: 'fa-piggy-bank',      fields: ['budget'],         neutral: { budget: 40000 },       active: function (p) { return p.budget !== 15000; },      desc: function (p) { return '€' + (p.budget || 0).toLocaleString() + '/yr'; } },
+        { key: 'maxTuition',  label: 'Max tuition',        icon: 'fa-money-bill-wave', fields: ['maxTuition'],     neutral: { maxTuition: 40000 },   active: function (p) { return p.maxTuition < 40000; },    desc: function (p) { return '≤ €' + (p.maxTuition || 0).toLocaleString(); } },
+        { key: 'maxLiving',   label: 'Living cost',        icon: 'fa-house-chimney',   fields: ['maxLiving'],      neutral: { maxLiving: 2500 },     active: function (p) { return p.maxLiving < 2500; },      desc: function (p) { return '≤ €' + (p.maxLiving || 0).toLocaleString() + '/mo'; } },
+        { key: 'minEmployer', label: 'Employer match',     icon: 'fa-building',        fields: ['minEmployer'],    neutral: { minEmployer: 0 },      active: function (p) { return p.minEmployer > 0; },       desc: function (p) { return '≥ ' + p.minEmployer + '%'; } },
+        { key: 'minSalary',   label: 'Graduate salary',    icon: 'fa-sack-dollar',     fields: ['minSalary'],      neutral: { minSalary: 0 },        active: function (p) { return p.minSalary > 0; },         desc: function (p) { return '≥ €' + (p.minSalary || 0).toLocaleString(); } },
+        { key: 'countries',   label: 'Countries',          icon: 'fa-flag',            fields: ['countries'],      neutral: { countries: [] },       active: function (p) { return !!(p.countries && p.countries.length); }, desc: function (p) { return p.countries.map(function (c) { return c.toUpperCase(); }).join(', '); } },
+        { key: 'vibe',        label: 'City vibe',          icon: 'fa-city',            fields: ['vibe'],           neutral: { vibe: 'any' },         active: function (p) { return p.vibe && p.vibe !== 'any'; }, desc: function (p) { return p.vibe === 'big' ? 'Big city' : 'Smaller town'; } },
+        { key: 'hobbies',     label: 'Hobbies',            icon: 'fa-heart',           fields: ['hobbies'],        neutral: { hobbies: [] },         active: function (p) { return p.hobbies.length > 0; },    desc: function (p) { return p.hobbies.slice(0, 3).join(', ') + (p.hobbies.length > 3 ? ' +' + (p.hobbies.length - 3) : ''); } },
+        { key: 'sport',       label: 'Sport',              icon: 'fa-person-running',  fields: ['sport', 'athlete'], neutral: { sport: '', athlete: 0 }, active: function (p) { return !!p.sport; },           desc: function (p) { return p.sport; } },
+        { key: 'priorities',  label: 'What matters most',  icon: 'fa-bullseye',        fields: ['priorities'],     neutral: { priorities: [] },      active: function (p) { return p.priorities.length > 0; }, desc: function (p) { return p.priorities.slice(0, 3).join(', '); } }
+    ];
+    function dimByKey(k) { return RECO_DIMS.filter(function (d) { return d.key === k; })[0]; }
+    function activeDims(p) { return RECO_DIMS.filter(function (d) { return d.active(p); }); }
+    // Keep only the chosen dimensions; reset everything else to its neutral value.
+    function neutralisePrefs(p, keepKeys) {
+        var out = {}; Object.keys(p).forEach(function (k) { out[k] = Array.isArray(p[k]) ? p[k].slice() : p[k]; });
+        RECO_DIMS.forEach(function (d) {
+            if (keepKeys.indexOf(d.key) !== -1) return;
+            Object.keys(d.neutral).forEach(function (f) { out[f] = Array.isArray(d.neutral[f]) ? d.neutral[f].slice() : d.neutral[f]; });
+        });
+        return out;
+    }
+    function matchWith(prefs, cb) {
+        // Honour a kept "Countries" filter by matching those countries; otherwise
+        // match the current study destination.
+        var codes = (prefs.countries && prefs.countries.length) ? prefs.countries.slice()
+            : [(typeof currentCountryCode !== 'undefined' && currentCountryCode) ? currentCountryCode : destCountries()[0]];
+        Promise.all(codes.map(loadUnisFor)).then(function (lists) {
+            var scored = [];
+            lists.forEach(function (list, idx) {
+                var code = codes[idx];
+                applyFilters(list, code, prefs).forEach(function (it) {
+                    var s = scoreUni(it.u, prefs, code);
+                    scored.push({ u: it.u, pct: matchPct(s.pct, it.pen), reasons: s.reasons, factors: s.factors, code: code, misses: it.misses });
+                });
+            });
+            scored.sort(function (a, b) { return b.pct - a.pct; });
+            cb(scored);
+        });
+    }
+    function wireResultCards(box) {
+        box.querySelectorAll('.fy__cbtn').forEach(function (b) {
+            b.addEventListener('click', function (e) { e.stopPropagation(); var r = lastScored[+b.dataset.i]; if (!r) return; if (b.dataset.act === 'save') saveUni(r.u); else sendToCompare(r.u); });
+        });
+        box.querySelectorAll('.fy__card[data-i]').forEach(function (card) {
+            card.addEventListener('click', function () { var r = lastScored[+card.dataset.i]; if (r) openDetail(r); });
+        });
+    }
+    // Write a full pref object back into the form (used by "Apply these filters").
+    function applyRelaxedToForm(r) {
+        sel.subjects = (r.subjects || []).slice();
+        sel.hobbies = (r.hobbies || []).slice();
+        sel.priorities = (r.priorities || []).slice();
+        sel.countries = (r.countries || []).slice();
+        if (subjectPicker) subjectPicker.refresh();
+        if (hobbyPicker) hobbyPicker.refresh();
+        buildCountryChips();
+        var pri = document.getElementById('fyPriorities');
+        if (pri) pri.querySelectorAll('.fy__chip').forEach(function (c) { c.classList.toggle('is-on', sel.priorities.indexOf(c.dataset.v) !== -1); });
+        var setV = function (id, v) { var e = document.getElementById(id); if (e) e.value = (v == null ? '' : v); };
+        setV('fyAvg', r.avg); setV('fyExp', r.exp);
+        setV('fyLang', r.lang || ''); setV('fyVibe', r.vibe || 'any'); setV('fySport', r.sport || ''); setV('fyAthlete', r.athlete || 0);
+        if (r.level) setV('fyLevel', r.level);
+        if (budgetSlider) { budgetSlider.value = (r.budget != null ? r.budget : 15000); syncBudget(); }
+        setV('fyMaxTuition', r.maxTuition); setV('fyLiving', r.maxLiving); setV('fyRank', r.rankTier);
+        setV('fyAccept', r.minAccept); setV('fyEmployer', r.minEmployer); setV('fySalary', r.minSalary);
+        Object.keys(EXTRA_SLIDERS).forEach(syncExtraSlider);
+        var form = document.getElementById('fyForm'); if (form) form.querySelectorAll('select').forEach(function (s) { s.dispatchEvent(new Event('change', { bubbles: true })); });
+        savePrefs(readPrefs());
+    }
+
+    var recoKeep = [];
+    function renderEmptyState(box) {
+        var p = readPrefs();
+        var dims = activeDims(p);
+        box.innerHTML =
+            '<div class="fy__none">' +
+                '<div class="fy__none__ic"><i class="fa-solid fa-compass"></i></div>' +
+                '<div class="fy__none__t">No universities match all your filters</div>' +
+                '<div class="fy__none__s">' + (dims.length
+                    ? 'Your filters are a little strict. Tell us the few things that matter most and we\'ll find options that still respect them.'
+                    : 'Try adding a study destination above, or loosen your budget.') + '</div>' +
+                (dims.length ? '<button class="fy__reco__cta" id="fyRecoStart"><i class="fa-solid fa-wand-magic-sparkles"></i> What matters most to me?</button>' : '') +
+            '</div>';
+        var b = document.getElementById('fyRecoStart');
+        if (b) b.addEventListener('click', function () { recoKeep = []; renderRecoPicker(); });
+    }
+    function renderRecoPicker() {
+        var box = document.getElementById('fyResults');
+        var p = readPrefs();
+        var dims = activeDims(p);
+        var chips = dims.map(function (d) {
+            return '<button type="button" class="fy__reco__chip' + (recoKeep.indexOf(d.key) !== -1 ? ' is-on' : '') + '" data-k="' + d.key + '">' +
+                '<i class="fa-solid ' + d.icon + '"></i> ' + d.label + ' <span class="fy__reco__chip__v">' + d.desc(p) + '</span></button>';
+        }).join('');
+        box.innerHTML =
+            '<div class="fy__reco">' +
+                '<div class="fy__reco__hd"><i class="fa-solid fa-hand-sparkles" style="color:var(--orange)"></i> Pick up to 3 that matter most</div>' +
+                '<div class="fy__reco__sub">We\'ll keep these and relax the rest to find universities for you.</div>' +
+                '<div class="fy__reco__chips">' + chips + '</div>' +
+                '<div class="fy__reco__actions">' +
+                    '<button class="fy__reco__go" id="fyRecoGo"><i class="fa-solid fa-wand-magic-sparkles"></i> Show my recommendations</button>' +
+                '</div>' +
+            '</div>';
+        box.querySelectorAll('.fy__reco__chip').forEach(function (c) {
+            c.addEventListener('click', function () {
+                var k = c.dataset.k, i = recoKeep.indexOf(k);
+                if (i !== -1) { recoKeep.splice(i, 1); c.classList.remove('is-on'); }
+                else { if (recoKeep.length >= 3) return; recoKeep.push(k); c.classList.add('is-on'); }
+            });
+        });
+        document.getElementById('fyRecoGo').addEventListener('click', runReco);
+    }
+    function runReco() {
+        var box = document.getElementById('fyResults');
+        box.innerHTML = '<div class="fy__empty"><i class="fa-solid fa-spinner fa-spin"></i> Finding options for you…</div>';
+        var p = readPrefs();
+        var keep = recoKeep.slice(0, 3);
+        var relaxed = neutralisePrefs(p, keep);
+        matchWith(relaxed, function (scored) {
+            if (scored.length) { renderRecoResults(scored, keep, relaxed, false); return; }
+            // even the kept few were too strict → relax everything and show the closest.
+            var relaxAll = neutralisePrefs(p, []);
+            matchWith(relaxAll, function (scored2) { renderRecoResults(scored2, [], relaxAll, true); });
+        });
+    }
+    function renderRecoResults(scored, keep, relaxed, tooStrict) {
+        var box = document.getElementById('fyResults');
+        var p = readPrefs();
+        lastScored = scored; resPage = 0;
+        _aiRanked = false;   // the recommender path is deterministic, not AI-ranked
+        if (!scored.length) { box.innerHTML = '<div class="fy__empty">We still couldn\'t find a match — try adding a study destination.</div>'; return; }
+        var keptTxt = keep.map(function (k) { var d = dimByKey(k); return '<span class="fy__reco__tag fy__reco__tag--keep"><i class="fa-solid ' + d.icon + '"></i> ' + d.label + ': ' + d.desc(p) + '</span>'; }).join('');
+        var relaxedDims = RECO_DIMS.filter(function (d) { return d.active(p) && keep.indexOf(d.key) === -1; });
+        var relaxedTxt = relaxedDims.map(function (d) { return '<span class="fy__reco__tag fy__reco__tag--relax">' + d.label + '</span>'; }).join('');
+        var top = scored.slice(0, 6);
+        var html =
+            '<div class="fy__reco__banner">' +
+                '<div class="fy__reco__banner__t"><i class="fa-solid fa-wand-magic-sparkles" style="color:var(--orange)"></i> ' +
+                    (tooStrict ? 'Your priorities were still too strict — here are the closest options' : 'Found ' + scored.length + ' universities by keeping what matters most') + '</div>' +
+                (keptTxt ? '<div class="fy__reco__line"><b>Keeping:</b> ' + keptTxt + '</div>' : '') +
+                (relaxedTxt ? '<div class="fy__reco__line"><b>Relaxed:</b> ' + relaxedTxt + '</div>' : '') +
+                '<div class="fy__reco__btns"><button class="fy__reco__apply" id="fyRecoApply"><i class="fa-solid fa-check"></i> Apply these filters</button></div>' +
+            '</div>';
+        html += top.map(function (r, i) { return cardHtml(r, i, i === 0); }).join('');
+        box.innerHTML = html;
+        wireResultCards(box);
+        document.getElementById('fyRecoApply').addEventListener('click', function () {
+            applyRelaxedToForm(relaxed);
+            render(scored.slice(0, 10));
+            revealShowAll();
+        });
+    }
+
+    // ══════════ AI ranking (Groq via the server — no browser key) ══════════
+    // The AI *decides the list itself*: filters only narrow the candidate pool, then
+    // the model re-orders it using outside factors the filters can't see (subject
+    // strength, talent pathways, city fit, career outcomes, value for money).
+    // If the server is down or has no key we fall back silently to the local ranking.
+    var AI_API_BASE = (function () {
+        if (location.protocol === 'file:') return 'http://localhost:4242';
+        var isLocal = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
+        if (isLocal && location.port !== '4242') return 'http://localhost:4242';
+        return location.origin;
+    }());
+    var _aiRanked = false;   // did the shown list come from the AI?
+
+    function aiPayload(scored) {
+        return scored.map(function (r) {
+            var u = r.u;
+            return {
+                id: u.id, name: u.name, city: u.city || '', country: countryName(r.code),
+                tuition: tuitionText(u), difficulty: u.diff || null,
+                acceptance: acceptanceRate(u), salary: gradSalary(u, r.code), employer: employerMatch(u, r.code),
+                fields: (u.fields || []).slice(0, 6), langs: u.langs || []
+            };
+        });
+    }
+    // Ask the AI to rank `scored` (already filter-narrowed). Always calls back —
+    // with the AI order when available, otherwise the untouched local order.
+    function aiRank(scored, prefs, cb) {
+        var pool = scored.slice(0, 20);
+        if (!pool.length) { _aiRanked = false; cb(scored); return; }
+
+        var timedOut = false;
+        var timer = setTimeout(function () { timedOut = true; _aiRanked = false; cb(scored); }, 20000);
+        var finish = function (list, usedAi) {
+            if (timedOut) return;
+            clearTimeout(timer);
+            _aiRanked = !!usedAi;
+            cb(list);
+        };
+
+        fetch(AI_API_BASE + '/api/ai/match', {
+            method: 'POST', headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ profile: prefs, candidates: aiPayload(pool) })
+        })
+        .then(function (r) { return r.json().then(function (j) { return { status: r.status, body: j }; }); })
+        .then(function (res) {
+            var data = res.body || {};
+            if (res.status !== 200 || !data.ok || !Array.isArray(data.ranked) || !data.ranked.length) {
+                finish(scored, false); return;
+            }
+            var byId = {};
+            pool.forEach(function (r) { byId[String(r.u.id)] = r; });
+            var out = [];
+            data.ranked.forEach(function (item) {
+                var r = byId[String(item.id)];
+                if (!r || out.indexOf(r) !== -1) return;
+                if (item.reason) r.reasons = [item.reason];        // the AI's own "why"
+                if (typeof item.match === 'number') r.pct = Math.max(20, Math.min(99, item.match));
+                r.aiPick = true;
+                out.push(r);
+            });
+            if (!out.length) { finish(scored, false); return; }
+            // Anything the AI didn't score keeps its local percentage and goes after,
+            // so the user always sees the full "matches + might-matches" list.
+            scored.forEach(function (r) { if (out.indexOf(r) === -1) out.push(r); });
+            finish(out, true);
+        })
+        .catch(function () { finish(scored, false); });   // server down → silent fallback
+    }
+
     function render(scored) {
         if (scored) { lastScored = scored; resPage = 0; }
         var box = document.getElementById('fyResults');
-        if (!lastScored.length) { box.innerHTML = '<div class="fy__empty">No universities to match in your saved destinations yet.</div>'; return; }
+        if (!lastScored.length) { renderEmptyState(box); return; }
         var pages = Math.ceil(lastScored.length / RES_PER);
         if (resPage > pages - 1) resPage = pages - 1;
         if (resPage < 0) resPage = 0;
         var start = resPage * RES_PER;
         var pageItems = lastScored.slice(start, start + RES_PER);
 
-        var html = '<div class="fy__results__hd"><i class="fa-solid fa-ranking-star" style="color:var(--orange)"></i> Your top matches <span class="fy__note">· across your destinations</span></div>';
+        var html = '<div class="fy__results__hd"><span class="fy__results__hd__t">' +
+            (_aiRanked
+                ? '<i class="fa-solid fa-wand-magic-sparkles" style="color:#7c4dff"></i> Chosen for you by AI <span class="fy__note">· weighed your whole profile</span>'
+                : '<i class="fa-solid fa-ranking-star" style="color:var(--orange)"></i> Your top matches <span class="fy__note">· ranked by fit</span>') +
+            '</span></div>';
         html += pageItems.map(function(r, j) { return cardHtml(r, start + j, start + j === 0); }).join('');
         if (pages > 1) {
             html += '<div class="fy__pager">' +
@@ -6995,20 +9107,33 @@ function showCheckoutBanner(kind) {
 
     function showResultsPanel() { if (modal) modal.classList.add('fy__modal--wide'); }
 
+    // Robust loader: cmpLoadCountryUnis swallows fetch errors (resolves with []),
+    // so on file:// or when the JSON isn't served the matcher would come up empty.
+    // Fall back to the already-loaded current-country universities (UNI global) so
+    // matching always has data to work with.
+    function loadUnisFor(code) {
+        var globalUni = (typeof UNI !== 'undefined') ? UNI : [];
+        if (typeof cmpLoadCountryUnis !== 'function') return Promise.resolve(globalUni);
+        return cmpLoadCountryUnis(code).then(function (list) {
+            if (list && list.length) return list;
+            return (code === currentCountryCode) ? globalUni : list;
+        }).catch(function () { return (code === currentCountryCode) ? globalUni : []; });
+    }
+
     // Load + score all universities across saved destinations (shared by matcher & "Show all").
     function scoreAll(cb) {
         var p = readPrefs();
         var codes = destCountries();
         var loaders = codes.map(function(code) {
-            if (typeof cmpLoadCountryUnis === 'function') {
-                return cmpLoadCountryUnis(code).then(function(list) { return { code: code, list: list || [] }; }).catch(function(){ return { code: code, list: [] }; });
-            }
-            return Promise.resolve({ code: code, list: (typeof UNI !== 'undefined' ? UNI : []) });
+            return loadUnisFor(code).then(function(list) { return { code: code, list: list || [] }; });
         });
         Promise.all(loaders).then(function(groups) {
             var scored = [];
             groups.forEach(function(g) {
-                g.list.forEach(function(u) { var s = scoreUni(u, p, g.code); scored.push({ u: u, pct: s.pct, reasons: s.reasons, factors: s.factors, code: g.code }); });
+                applyFilters(g.list, g.code, p).forEach(function(it) {
+                    var s = scoreUni(it.u, p, g.code);
+                    scored.push({ u: it.u, pct: matchPct(s.pct, it.pen), reasons: s.reasons, factors: s.factors, code: g.code, misses: it.misses });
+                });
             });
             scored.sort(function(a, b) { return b.pct - a.pct; });
             cb(scored);
@@ -7017,39 +9142,32 @@ function showCheckoutBanner(kind) {
 
     function revealShowAll() { var sa = document.getElementById('fyShowAll'); if (sa) sa.style.display = 'inline-flex'; }
 
-    // Top 10 universities of the CURRENT study-destination country, ranked by fit.
-    function runMatch() {
+    function aiLoading() {
+        document.getElementById('fyResults').innerHTML =
+            '<div class="fy__empty"><i class="fa-solid fa-spinner fa-spin"></i> AI is analysing your profile and picking your universities…</div>';
+    }
+    // Filters narrow the pool; the AI decides the final list and its order.
+    function runMatchTop(topN) {
         savePrefs(readPrefs());
         showResultsPanel();
-        document.getElementById('fyResults').innerHTML = '<div class="fy__empty"><i class="fa-solid fa-spinner fa-spin"></i> Scoring universities…</div>';
+        aiLoading();
         var p = readPrefs();
         var code = (typeof currentCountryCode !== 'undefined' && currentCountryCode) ? currentCountryCode : destCountries()[0];
-        var done = function(list) {
-            var scored = (list || []).map(function(u) { var s = scoreUni(u, p, code); return { u: u, pct: s.pct, reasons: s.reasons, factors: s.factors, code: code }; });
-            scored.sort(function(a, b) { return b.pct - a.pct; });
-            render(scored.slice(0, 10));
-            revealShowAll();
-        };
-        if (typeof cmpLoadCountryUnis === 'function') cmpLoadCountryUnis(code).then(done).catch(function(){ done(typeof UNI !== 'undefined' ? UNI : []); });
-        else done(typeof UNI !== 'undefined' ? UNI : []);
+        loadUnisFor(code).then(function (list) {
+            var scored = applyFilters(list, code, p).map(function (it) {
+                var s = scoreUni(it.u, p, code);
+                return { u: it.u, pct: matchPct(s.pct, it.pen), reasons: s.reasons, factors: s.factors, code: code, misses: it.misses };
+            });
+            scored.sort(function (a, b) { return b.pct - a.pct; });
+            if (!scored.length) { _aiRanked = false; render([]); return; }
+            aiRank(scored, p, function (ordered) {
+                render(ordered.slice(0, topN));
+                revealShowAll();
+            });
+        });
     }
-
-    // Match ONLY the current study-destination country.
-    function runMatchCountry() {
-        savePrefs(readPrefs());
-        showResultsPanel();
-        document.getElementById('fyResults').innerHTML = '<div class="fy__empty"><i class="fa-solid fa-spinner fa-spin"></i> Scoring universities…</div>';
-        var p = readPrefs();
-        var code = (typeof currentCountryCode !== 'undefined' && currentCountryCode) ? currentCountryCode : destCountries()[0];
-        var done = function(list) {
-            var scored = (list || []).map(function(u) { var s = scoreUni(u, p, code); return { u: u, pct: s.pct, reasons: s.reasons, factors: s.factors, code: code }; });
-            scored.sort(function(a, b) { return b.pct - a.pct; });
-            render(scored.slice(0, 30));
-            revealShowAll();
-        };
-        if (typeof cmpLoadCountryUnis === 'function') cmpLoadCountryUnis(code).then(done).catch(function(){ done(typeof UNI !== 'undefined' ? UNI : []); });
-        else done(typeof UNI !== 'undefined' ? UNI : []);
-    }
+    function runMatch()        { runMatchTop(16); }   // 2 pages of 8
+    function runMatchCountry() { runMatchTop(32); }
     function updateThisCountryLabel() {
         var lbl = document.getElementById('fyThisCountryLbl');
         if (lbl) lbl.textContent = (typeof currentCountryCode !== 'undefined' && typeof countryNameByCode === 'function') ? countryNameByCode(currentCountryCode) : 'This country';
@@ -7057,12 +9175,19 @@ function showCheckoutBanner(kind) {
 
     // Clear every input back to its default (used when re-entering the Explore tab).
     function resetForm() {
-        sel.subjects = []; sel.hobbies = []; sel.priorities = [];
+        sel.subjects = []; sel.hobbies = []; sel.priorities = []; sel.countries = [];
+        if (subjectPicker) subjectPicker.refresh();
+        if (hobbyPicker) hobbyPicker.refresh();
         document.querySelectorAll('#fyForm .fy__chip.is-on').forEach(function(c) { c.classList.remove('is-on'); });
         ['fyAvg', 'fyExp'].forEach(function(id) { var e = document.getElementById(id); if (e) e.value = ''; });
-        ['fyLang', 'fyLevel', 'fyVibe', 'fySport'].forEach(function(id) { var e = document.getElementById(id); if (e) e.selectedIndex = 0; });
+        ['fyLang', 'fyLevel', 'fyVibe', 'fySport', 'fyRank'].forEach(function(id) { var e = document.getElementById(id); if (e) e.selectedIndex = 0; });
         var ath = document.getElementById('fyAthlete'); if (ath) ath.value = '0';
         if (budgetSlider) { budgetSlider.value = 15000; syncBudget(); }
+        // reset the new sliders to their "no filter" defaults
+        var d = { fyMaxTuition: 40000, fyLiving: 2500, fyAccept: 0, fyEmployer: 0, fySalary: 0 };
+        Object.keys(d).forEach(function (id) { var e = document.getElementById(id); if (e) { e.value = d[id]; syncExtraSlider(id); } });
+        var rf = document.getElementById('fyForm');
+        if (rf) rf.querySelectorAll('select').forEach(function (s) { s.dispatchEvent(new Event('change', { bubbles: true })); });
         if (modal) modal.classList.remove('fy__modal--wide');          // collapse any results
         var sa = document.getElementById('fyShowAll'); if (sa) sa.style.display = 'none';
     }
@@ -7081,7 +9206,7 @@ function showCheckoutBanner(kind) {
     function rowHtml(r) {
         var u = r.u;
         return '<div class="fy__row2" data-id="' + (u.id || '') + '">' + ringSm(r) +
-            '<div class="fy__row2__info"><div class="fy__card__name" style="font-size:13px;"><span class="fy__card__abbr" style="background:' + (u.color || '#555') + '">' + (u.abbr || 'U') + '</span>' + (u.name || '') + '</div>' +
+            '<div class="fy__row2__info"><div class="fy__card__name" style="font-size:13px;"><span class="fy__card__abbr fy__card__abbr--logo">' + uniLogo(u, 24) + '</span>' + (u.name || '') + '</div>' +
             '<div class="fy__card__meta"><span class="fi fi-' + r.code + '"></span> ' + (u.city || '') + ' · ' + countryName(r.code) + '</div></div>' +
             '<div class="fy__row2__actions">' +
                 '<button class="fy__cbtn" data-act="save" data-id="' + (u.id || '') + '" title="Save"><i class="fa-regular fa-bookmark"></i></button>' +
@@ -7212,19 +9337,20 @@ function showCheckoutBanner(kind) {
     function closeFy() { overlay.classList.remove('open'); document.body.style.overflow = ''; }
 
     // Init
-    buildChips('fySubjects', SUBJECTS, 'subjects');
-    buildChips('fyHobbies', HOBBIES, 'hobbies');
+    subjectPicker = ChipPicker({ chipsId: 'fySubjectsRow', inputId: 'fySubjectsInput', pool: SUBJECTS_ALL, bucket: 'subjects', pageSize: 8 });
+    hobbyPicker   = ChipPicker({ chipsId: 'fyHobbiesRow',  inputId: 'fyHobbiesInput',  pool: HOBBIES_ALL,  bucket: 'hobbies',  pageSize: 6 });
     buildChips('fyPriorities', PRIORITIES, 'priorities');
     fillSports();
+    enhanceAllSelects();
     budgetSlider.addEventListener('input', syncBudget);
+    initExtraSliders();
+    buildCountryChips();
     loadPrefs();
     renderDest();
 
     document.getElementById('fyFabMain').addEventListener('click', openFy);
     document.getElementById('fyFabHide').addEventListener('click', function() { setHidden(true); });
     if (hdrBtn) hdrBtn.addEventListener('click', openFy);
-    var showAllBtn = document.getElementById('fyShowAll');
-    if (showAllBtn) showAllBtn.addEventListener('click', openShowAll);
     document.getElementById('fyDock').addEventListener('click', function() { setHidden(!isHidden()); });
     document.getElementById('fyClose').addEventListener('click', closeFy);
     overlay.addEventListener('click', function(e) { if (e.target === overlay) closeFy(); });
@@ -7293,6 +9419,28 @@ function applyExploreMatcherLayout() {
         if (hero)       hero.style.display = '';
         if (brk)        brk.style.display = 'none';
         if (filterCard) filterCard.style.display = 'none';
+
+        // The rebuilt "Made for you" (madeForYou.js) renders straight into the mount;
+        // the old matcher modal goes back to its pop-up overlay.
+        if (typeof window.mfyMount === 'function') {
+            if (overlay && modal.parentNode !== overlay) overlay.appendChild(modal);
+            modal.classList.remove('fy__modal--inline');
+            var sepN = document.getElementById('fyMatchSep');
+            if (!sepN) {
+                sepN = document.createElement('div');
+                sepN.className = 'exp__break exp__break--matcher';
+                sepN.id = 'fyMatchSep';
+                sepN.innerHTML = '<div class="exp__break__line"></div><div class="exp__break__pill"><i class="fa-solid fa-wand-magic-sparkles"></i><span>Made for you</span></div><div class="exp__break__line"></div>';
+            }
+            sepN.style.display = '';
+            if (brk && brk.parentNode) { brk.parentNode.insertBefore(sepN, brk); brk.parentNode.insertBefore(mount, brk); }
+            mount.classList.remove('fy--open');
+            mount.style.display = 'block';
+            window.mfyMount(mount);
+            window.__fyInline = false;
+            if (typeof window.updateFyButtons === 'function') window.updateFyButtons();
+            return;
+        }
 
         // Matcher container with a button (left) + a branded quote (right).
         var intro = document.getElementById('fyIntro');
@@ -7415,10 +9563,24 @@ function applyExploreMatcherLayout() {
     'use strict';
     var KEY = 'us_gradebook_' + user.id;
     var ASSESS_TYPES = ['Test', 'Quiz', 'Exam', 'Midterm', 'Final', 'Coursework', 'Project', 'Homework'];
-    var PALETTE = ['#d97c14', '#3498db', '#27ae60', '#9b59b6', '#e74c3c', '#1abc9c', '#e67e22', '#2c3e50'];
+    var PALETTE = ['#2a56c6', '#d7373f', '#1c8a4e', '#7a4fc9', '#e0701a', '#0f8b8d', '#c2185b', '#5b6b8a'];   // pen colours
 
     function fresh() { return { v: 1, scale: 'pct', subjects: [], unis: { dream: [], target: [], safety: [] }, goals: [] }; }
-    function load() { try { var d = JSON.parse(localStorage.getItem(KEY)); return d && d.subjects ? d : fresh(); } catch (e) { return fresh(); } }
+    // Normalise so older / partial saves can never break the app (missing `unis`,
+    // `goals`, etc. used to throw at init and take the whole page down with them).
+    function normalizeGb(d) {
+        if (!d || typeof d !== 'object') return fresh();
+        d.v = d.v || 1;
+        d.scale = d.scale || 'pct';
+        if (!Array.isArray(d.subjects)) d.subjects = [];
+        if (!d.unis || typeof d.unis !== 'object') d.unis = {};
+        d.unis.dream  = Array.isArray(d.unis.dream)  ? d.unis.dream  : [];
+        d.unis.target = Array.isArray(d.unis.target) ? d.unis.target : [];
+        d.unis.safety = Array.isArray(d.unis.safety) ? d.unis.safety : [];
+        if (!Array.isArray(d.goals)) d.goals = [];
+        return d;
+    }
+    function load() { try { var d = JSON.parse(localStorage.getItem(KEY)); return (d && d.subjects) ? normalizeGb(d) : fresh(); } catch (e) { return fresh(); } }
     function save(d) { try { localStorage.setItem(KEY, JSON.stringify(d)); } catch (e) {} }
     var GB = load();
     var uid = function () { return Date.now().toString(36) + Math.random().toString(36).slice(2, 6); };
@@ -7427,6 +9589,7 @@ function applyExploreMatcherLayout() {
           are used ONLY for university chances/readiness/gaps. ── */
     var SCALES = {
         pct: { max: 100, label: 'Percentage (0–100)', hint: '/ 100' },
+        ib:  { max: 7,   label: 'IB (1–7 per subject)', hint: '/ 7' },
         p10: { max: 10,  label: 'Points (1–10)',       hint: '/ 10' },
         p9:  { max: 9,   label: 'GCSE (1–9)',          hint: '/ 9' },
         p8:  { max: 8,   label: 'Out of 8 (1–8)',      hint: '/ 8' },
@@ -7471,7 +9634,7 @@ function applyExploreMatcherLayout() {
     // Overall-average timeline: recompute the overall average after each grade (by date) was added.
     function overallSeries() {
         var all = [];
-        GB.subjects.forEach(function (s) { s.assessments.forEach(function (a) { all.push({ sid: s.id, a: a }); }); });
+        GB.subjects.forEach(function (s) { (s.assessments || []).forEach(function (a) { all.push({ sid: s.id, a: a }); }); });
         all.sort(function (x, y) { return (x.a.date || '').localeCompare(y.a.date || '') || x.a.ts - y.a.ts; });
         var bySub = {}, series = [];
         all.forEach(function (item) {
@@ -7523,12 +9686,13 @@ function applyExploreMatcherLayout() {
         });
         var last = pts[pts.length - 1].split(',');
         svg.innerHTML =
-            '<polyline fill="none" stroke="#d97c14" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" points="' + pts.join(' ') + '"/>' +
-            '<circle cx="' + last[0] + '" cy="' + last[1] + '" r="3" fill="#d97c14"/>';
+            '<polyline fill="none" style="stroke:var(--gb-pen, #2a56c6)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" points="' + pts.join(' ') + '"/>' +
+            '<circle cx="' + last[0] + '" cy="' + last[1] + '" r="3" style="fill:var(--gb-pen, #2a56c6)"/>';
     }
 
     /* ── Renderers ─────────────────────────────────────────── */
-    function ringColor(p) { return p >= 85 ? '#27ae60' : p >= 70 ? '#f39c12' : p >= 50 ? '#e67e22' : '#e74c3c'; }
+    // Pen colours come from the page theme (gradebook.css / overview.css); hex values are fallbacks.
+    function ringColor(p) { return p >= 85 ? 'var(--gb-good, #1c8a4e)' : p >= 70 ? 'var(--gb-ok, #c98300)' : p >= 50 ? 'var(--gb-meh, #e0701a)' : 'var(--gb-bad, #d7373f)'; }
 
     // How close the student is to where they want to be (0–100). Uses the aim
     // university's readiness if one is chosen, otherwise the average as a %.
@@ -7540,11 +9704,11 @@ function applyExploreMatcherLayout() {
     // Animated line that trends UP (green) when on track (≥70% close) or DOWN (red) otherwise.
     function trendGraph(svg, up) {
         if (!svg) return;
-        var col = up ? '#27ae60' : '#e74c3c';
+        var col = up ? 'var(--gb-good, #1c8a4e)' : 'var(--gb-bad, #d7373f)';
         var pts = up ? '4,44 26,38 50,40 74,24 98,16 116,7' : '4,12 26,18 50,17 74,32 98,40 116,50';
-        var head = up ? '<path d="M116,7 l-10,0.5 l5,7.5 z" fill="' + col + '"/>'
-                      : '<path d="M116,50 l-10,-0.5 l5,-7.5 z" fill="' + col + '"/>';
-        svg.innerHTML = '<polyline class="gb__tg__line" fill="none" stroke="' + col + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="' + pts + '"/>' + head;
+        var head = up ? '<path d="M116,7 l-10,0.5 l5,7.5 z" style="fill:' + col + '"/>'
+                      : '<path d="M116,50 l-10,-0.5 l5,-7.5 z" style="fill:' + col + '"/>';
+        svg.innerHTML = '<polyline class="gb__tg__line" fill="none" style="stroke:' + col + '" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" points="' + pts + '"/>' + head;
         var ln = svg.querySelector('.gb__tg__line');
         if (ln) {
             var len = ln.getTotalLength ? ln.getTotalLength() : 220;
@@ -7572,7 +9736,38 @@ function applyExploreMatcherLayout() {
         var glbl = document.getElementById('gbTrendGraphLbl'), aim = aimUni();
         if (glbl) {
             if (c == null) glbl.textContent = 'Add grades to see your trajectory';
-            else glbl.innerHTML = '<span style="color:' + (up ? '#27ae60' : '#e8850a') + ';font-weight:800">' + c + '% ready</span> for ' + (aim ? esc(aim.name) : 'your goal');
+            else glbl.innerHTML = '<span style="color:' + (up ? 'var(--gb-good, #1c8a4e)' : 'var(--gb-meh, #e0701a)') + ';font-weight:800">' + c + '% ready</span> for ' + (aim ? esc(aim.name) : 'your goal');
+        }
+        // IB: the diploma is out of 45 — best six subjects (7 each) + up to 3 core points.
+        var ibEl = document.getElementById('gbIbTotal');
+        if (ibEl) {
+            var avgs = GB.scale === 'ib' ? GB.subjects.map(subjAvg).filter(function (v) { return v != null; }).sort(function (a, b) { return b - a; }) : [];
+            ibEl.hidden = !avgs.length;
+            if (avgs.length) {
+                var pts = avgs.length >= 6 ? avgs.slice(0, 6).reduce(function (a, b) { return a + b; }, 0) : (avgs.reduce(function (a, b) { return a + b; }, 0) / avgs.length) * 6;
+                ibEl.innerHTML = 'IB diploma \u2248 <b>' + Math.round(pts) + '</b> / 42 from your best six subjects, plus up to 3 core points (TOK &amp; EE)' + (avgs.length < 6 ? ' \u2014 estimated from ' + avgs.length + ' subject' + (avgs.length === 1 ? '' : 's') : '') + '.';
+            }
+        }
+        // Red-pen note next to the average: the one thing to know.
+        var note = document.getElementById('gbNote');
+        if (note) {
+            var txt = '', good = false;
+            if (o != null) {
+                if (aim) {
+                    var short = Math.round((reqMark(aim) - o) * 10) / 10, who = aim.abbr && aim.abbr.length <= 10 ? aim.abbr : aim.name;
+                    good = short <= 0;
+                    txt = good ? 'on track for ' + who + '!' : '+' + short + ' to reach ' + who;
+                } else {
+                    var r = o / scaleMax();
+                    good = r >= .7;
+                    txt = r >= .85 ? 'great work!' : r >= .7 ? 'solid \u2014 keep going' : 'room to grow';
+                }
+            }
+            if (note.textContent !== txt) {
+                note.textContent = txt;
+                note.classList.toggle('is-good', good);
+                note.classList.remove('is-in'); void note.offsetWidth; if (txt) note.classList.add('is-in');
+            }
         }
     }
 
@@ -7892,9 +10087,14 @@ function applyExploreMatcherLayout() {
             choose.style.display = 'none';
             chosen.style.display = 'block';
             var logo = document.getElementById('gbDreamLogo');
+            var dreamCard = chosen.querySelector('.gb__dream__card');
+            if (dreamCard) dreamCard.setAttribute('data-id', aimId);   // click → university detail
             var nameEl = document.getElementById('gbAimName');
             var metaEl = document.getElementById('gbDreamMeta');
-            if (logo) { logo.textContent = u ? (u.abbr || (u.name || '?').slice(0,2).toUpperCase()) : '★'; logo.style.background = u ? (u.color || '#d97c14') : '#d97c14'; }
+            if (logo) {   // the real crest, like everywhere else
+                if (u) { logo.innerHTML = uniLogo(u, 42); logo.style.background = 'transparent'; cmpHydrateLogos(logo); }
+                else { logo.textContent = '★'; logo.style.background = '#d97c14'; }
+            }
             if (nameEl) nameEl.textContent = u ? u.name : 'your university';
             if (metaEl) metaEl.innerHTML = u
                 ? '<i class="fa-solid fa-location-dot"></i> ' + esc(u.city || '') + (u.dl ? ' · ' + esc(u.dl) : '')
@@ -7919,7 +10119,7 @@ function applyExploreMatcherLayout() {
     /* ── Post-upload: gap to dream + realistic options within budget ── */
     var suggestUseExplore = false;
     var suggestPage = 1;
-    var SG_PER_PAGE = 4;
+    var SG_PER_PAGE = 6;
     function realisticOptions(useExplore) {
         var o = overallAvg(); if (o == null) return [];
         var gPct = toPct(o);
@@ -7980,17 +10180,17 @@ function applyExploreMatcherLayout() {
         if (suggestPage < 1) suggestPage = 1;
         var pageOpts = opts.slice((suggestPage - 1) * SG_PER_PAGE, suggestPage * SG_PER_PAGE);
 
+        var gPct = toPct(o), max = scaleMax();
         var cards = pageOpts.length ? pageOpts.map(function (u, i) {
-            var rank = (typeof UNI !== 'undefined') ? UNI.indexOf(u) + 1 : 0;
-            return '<button class="gbsg__card" data-id="' + u.id + '" style="--c:' + (u.color || '#d97c14') + ';animation-delay:' + (i * 55) + 'ms">' +
-                '<span class="gbsg__card__logo" style="background:' + (u.color || '#d97c14') + '">' + esc(u.abbr || (u.name || '?').slice(0,2).toUpperCase()) + '</span>' +
-                '<div class="gbsg__card__info">' +
-                    '<div class="gbsg__card__name">' + esc(u.name) + '</div>' +
-                    '<div class="gbsg__card__meta"><i class="fa-solid fa-location-dot"></i> ' + esc(u.city || '') + '</div>' +
-                '</div>' +
-                (rank > 0 ? '<span class="gbsg__card__rank"><small>#</small>' + rank + '</span>' : '') +
+            var rank = (typeof UNI !== 'undefined') ? UNI.indexOf(u) + 1 : 0, r = readinessForPct(gPct, u), hi = r >= 80;
+            return '<button type="button" class="gsx-card" data-id="' + u.id + '" style="--c:' + (u.color || '#8ea0d8') + ';--r:' + r + ';--i:' + i + '">' +
+                '<span class="gsx-orbit"><svg viewBox="0 0 64 64" aria-hidden="true"><circle class="gsx-orbit__track" cx="32" cy="32" r="28"/><circle class="gsx-orbit__arc' + (hi ? ' is-hi' : '') + '" cx="32" cy="32" r="28" pathLength="100"/></svg><svg class="gsx-orbit__ring" viewBox="0 0 64 64" aria-hidden="true"><circle class="gsx-orbit__dash" cx="32" cy="32" r="31"/></svg>' +
+                    '<span class="gsx-orbit__logo">' + uniLogo(u, 30) + '</span><i class="gsx-orbit__moon" aria-hidden="true"></i></span>' +
+                '<span class="gsx-card__txt"><b>' + esc(u.name) + '</b><small><i class="fa-solid fa-location-dot" aria-hidden="true"></i>' + esc(u.city || '') + (u.type ? ' · ' + esc(u.type) : '') + '</small></span>' +
+                '<span class="gsx-card__pct' + (hi ? ' is-hi' : '') + '"><b>' + r + '<small>%</small></b><em>ready</em></span>' +
+                (rank > 0 ? '<span class="gsx-card__rank">#' + rank + '</span>' : '') +
             '</button>';
-        }).join('') : '<p class="gbsg__none"><i class="fa-solid fa-circle-info"></i> No options match these filters — try widening them on Explore.</p>';
+        }).join('') : '<p class="gsx-none"><i class="fa-solid fa-satellite-dish" aria-hidden="true"></i> Nothing in range with these filters — widen them on Explore.</p>';
 
         // Compact keyword chips of the filters the user saved from Explore.
         var ef = (typeof getGbFilters === 'function' && getGbFilters()) || {};
@@ -8012,42 +10212,53 @@ function applyExploreMatcherLayout() {
             if (ef.budget)  fk.push('≤ €' + Number(ef.budget).toLocaleString() + '/yr');
         }
         var chips = fk.length
-            ? fk.map(function (c) { return '<span class="gbsg__fchip">' + esc(c) + '</span>'; }).join('')
-            : '<span class="gbsg__fchip gbsg__fchip--none">no saved Explore filters — set them on Explore</span>';
+            ? fk.map(function (c) { return '<span class="gsx-chip">' + esc(c) + '</span>'; }).join('')
+            : '<span class="gsx-chip gsx-chip--none">no saved Explore filters</span>';
 
+        var dots = '';
+        for (var pg = 1; pg <= totalPages; pg++) dots += '<i' + (pg === suggestPage ? ' class="is-on"' : '') + '></i>';
         var pager = totalPages > 1
-            ? '<div class="gbsg__pager">' +
-                '<button class="gbsg__pg" id="gbSgPrev"' + (suggestPage <= 1 ? ' disabled' : '') + '><i class="fa-solid fa-chevron-left"></i></button>' +
-                '<span class="gbsg__pg__lbl">' + suggestPage + ' / ' + totalPages + '</span>' +
-                '<button class="gbsg__pg" id="gbSgNext"' + (suggestPage >= totalPages ? ' disabled' : '') + '><i class="fa-solid fa-chevron-right"></i></button>' +
+            ? '<div class="gsx-pager">' +
+                '<button type="button" class="gsx-pg" id="gbSgPrev"' + (suggestPage <= 1 ? ' disabled' : '') + ' aria-label="Previous"><i class="fa-solid fa-chevron-left"></i></button>' +
+                '<span class="gsx-dots" aria-label="Page ' + suggestPage + ' of ' + totalPages + '">' + dots + '</span>' +
+                '<button type="button" class="gsx-pg" id="gbSgNext"' + (suggestPage >= totalPages ? ' disabled' : '') + ' aria-label="Next"><i class="fa-solid fa-chevron-right"></i></button>' +
               '</div>'
             : '';
 
+        var ready0 = ready == null ? 0 : ready, who = aim.abbr && aim.abbr.length <= 12 ? aim.abbr : aim.name;
+        modal.className = 'gbsg gsx';
         modal.innerHTML =
-            '<button class="gbsg__close" id="gbSuggestClose" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>' +
-            '<div class="gbsg__hero">' +
-                '<div class="gbsg__ring" style="--p:' + gap + ';--rc:' + gapColor + '"><div class="gbsg__ring__in"><b>' + gap + '%</b><small>away</small></div></div>' +
-                '<div class="gbsg__hero__txt">' +
-                    '<div class="gbsg__hero__eyebrow"><i class="fa-solid fa-star"></i> Your dream</div>' +
-                    '<h3 class="gbsg__hero__title">' + esc(aim.name) + '</h3>' +
-                    '<p class="gbsg__hero__sub">You\'re <b style="color:' + gapColor + '">' + gap + '% away</b> — here are realistic options that fit you.</p>' +
+            '<div class="gsx-sky" aria-hidden="true"><i></i><i></i><i></i></div>' +
+            '<button class="gsx-x" id="gbSuggestClose" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>' +
+            '<header class="gsx-hd">' +
+                '<div class="gsx-hd__txt">' +
+                    '<p class="gsx-kicker"><i aria-hidden="true"></i>Within your orbit</p>' +
+                    '<h3 class="gsx-title">Realistic <em>options</em></h3>' +
+                    '<p class="gsx-sub">Universities your <b>' + (Math.round(o * 10) / 10) + '<small>' + esc(scaleDef().hint) + '</small></b> already reaches — while you keep pulling towards ' + esc(aim.name) + '.</p>' +
                 '</div>' +
+                '<div class="gsx-traj" style="--p:' + ready0 + '" aria-label="' + ready0 + '% of the way to ' + esc(aim.name) + '">' +
+                    '<svg viewBox="0 0 300 150" preserveAspectRatio="none" aria-hidden="true"><path class="gsx-traj__all" d="M34 118 C 110 150, 190 118, 262 34"/><path class="gsx-traj__glow" d="M34 118 C 110 150, 190 118, 262 34" pathLength="100"/><path class="gsx-traj__done" d="M34 118 C 110 150, 190 118, 262 34" pathLength="100"/></svg>' +
+                    '<span class="gsx-you"><b>' + (Math.round(o * 10) / 10) + '</b><small>you</small></span>' +
+                    '<span class="gsx-dream">' + uniLogo(aim, 30) + '</span>' +
+                    '<span class="gsx-comet" aria-hidden="true"></span>' +
+                    '<span class="gsx-traj__lbl"><b>' + ready0 + '%</b> of the way to ' + esc(who) + '</span>' +
+                '</div>' +
+            '</header>' +
+            '<div class="gsx-bar">' +
+                '<button type="button" class="gsx-toggle' + (suggestUseExplore ? ' is-on' : '') + '" id="gbSuggestExplore" aria-pressed="' + (suggestUseExplore ? 'true' : 'false') + '"><span class="gsx-toggle__sw" aria-hidden="true"></span>' + (suggestUseExplore ? 'Matched to my filters' : 'Match my Explore filters') + '</button>' +
+                '<div class="gsx-chips" title="Filters you picked on the Explore page">' + chips + '</div>' +
+                '<span class="gsx-count">' + opts.length + ' in range</span>' +
             '</div>' +
-            '<div class="gbsg__body">' +
-                '<div class="gbsg__bar">' +
-                    '<span class="gbsg__bar__lbl"><i class="fa-solid fa-wand-magic-sparkles"></i> Realistic options</span>' +
-                    '<button class="gbsg__filter' + (suggestUseExplore ? ' gbsg__filter--on' : '') + '" id="gbSuggestExplore">' +
-                        '<i class="fa-solid fa-sliders"></i> ' + (suggestUseExplore ? 'Matched to filters' : 'Match my filters') +
-                    '</button>' +
-                '</div>' +
-                '<div class="gbsg__chips" title="Filters you picked on the Explore page">' + chips + '</div>' +
-                (suggestUseExplore
-                    ? '<p class="gbsg__hint gbsg__hint--on"><i class="fa-solid fa-circle-check"></i> Matched to your Explore filters.</p>'
-                    : '<p class="gbsg__hint"><i class="fa-solid fa-wand-magic-sparkles"></i> Set filters on <b>Explore</b>, then tap to tailor these to you.</p>'
-                ) +
-                '<div class="gbsg__grid">' + cards + '</div>' +
-                pager +
-            '</div>';
+            '<div class="gsx-grid">' + cards + '</div>' +
+            pager;
+        // put the comet where you are on the way to the dream
+        requestAnimationFrame(function () {
+            var tr = modal.querySelector('.gsx-traj'), path = modal.querySelector('.gsx-traj__all'), comet = modal.querySelector('.gsx-comet');
+            if (!tr || !path || !comet || !path.getPointAtLength) return;
+            var pt = path.getPointAtLength(path.getTotalLength() * Math.max(.02, Math.min(1, ready0 / 100)));
+            comet.style.left = (pt.x / 300 * 100) + '%'; comet.style.top = (pt.y / 150 * 100) + '%';
+        });
+        if (typeof cmpHydrateLogos === 'function') cmpHydrateLogos(modal);
     }
 
     function openSuggestModal() {
@@ -8129,7 +10340,7 @@ function applyExploreMatcherLayout() {
         box.innerHTML = buckets.map(function (b) {
             var list = scored.filter(b.f).sort(function (a, c) { return c.ratio - a.ratio; }).slice(0, 5);
             var items = list.map(function (x) {
-                return '<div class="gb__rec__item"><span class="gb__rec__abbr" style="background:' + (x.u.color || '#d97c14') + '">' + esc(x.u.abbr || '?') + '</span>' +
+                return '<div class="gb__rec__item" data-id="' + esc(x.u.id) + '"><span class="gb__rec__abbr">' + uniLogo(x.u, 26) + '</span>' +
                     '<span class="gb__rec__nm">' + esc(x.u.name) + '</span><b style="color:' + ringColor(x.pct) + '">' + x.pct + '%</b></div>';
             }).join('') || '<p class="gb__hint">None right now.</p>';
             return '<div class="gb__rec__col"><div class="gb__rec__hd" style="color:' + b.col + '"><i class="fa-solid ' + b.icon + '"></i> ' + b.label + '</div>' + items + '</div>';
@@ -8151,50 +10362,80 @@ function applyExploreMatcherLayout() {
         }
         w.style.display = ''; if (brk) brk.style.display = '';
         if (empty) empty.style.display = 'none';
-        var o = overallAvg();
-        document.getElementById('dshAcadAvg').textContent = o == null ? '—' : Math.round(toPct(o));   // always out of 100
-        // Animated up/down trajectory graphic (up & green if ≥70% close, else down & red)
-        var c = closeness(), up = c != null && c >= 70;
-        var g = document.getElementById('dshAcadGraph');
-        if (g) { if (c == null) g.innerHTML = ''; else trendGraph(g, up); }
-        var tEl = document.getElementById('dshAcadTrend');
-        if (tEl) {
-            if (c == null) tEl.textContent = '';
-            else tEl.innerHTML = '<span style="color:' + (up ? '#27ae60' : '#e74c3c') + ';font-weight:800">' + (up ? '▲ On track' : '▼ Needs a push') + '</span> · ' + c + '% there';
-        }
-        var ids = allTargetIds().slice(0, 3), rEl = document.getElementById('dshAcadReadiness');
-        if (rEl) {
-            rEl.innerHTML = ids.length && o != null ? ('<div class="dshacad__sub">University readiness</div>' + ids.map(function (id) {
-                var u = findUni(id); if (!u) return ''; var p = readinessPct(u);
-                return '<div class="dshacad__read__row"><span>' + esc(u.abbr || u.name) + '</span><b style="color:' + ringColor(p) + '">' + p + '%</b></div>';
-            }).join('')) : '<div class="dshacad__sub">Pick target universities in the Gradebook</div>';
-        }
-        var attn = attentionSubjects(), aEl = document.getElementById('dshAcadAttention');
-        if (aEl) {
-            aEl.innerHTML = '<div class="dshacad__sub">Needs attention</div>' + (attn.length ? attn.map(function (x) { return '<span class="dshacad__tag">' + esc(x.name) + ' <b>+' + x.need + '</b></span>'; }).join('') : '<span class="gb__hint">All good 🎉</span>');
-        }
-        // Improvement-to-target line + any linked deadline
-        var pEl = document.getElementById('dshAcadGoal'), plan = improvementPlan();
-        if (pEl) {
-            if (plan && plan.gap > 0) {
-                var dl = null; try { dl = getDlCustom().filter(function (d) { return /^gbgoal_|^gbplan_/.test(d.id); }).sort(function (a, b) { return a.date.localeCompare(b.date); })[0]; } catch (e) {}
-                pEl.style.display = '';
-                pEl.innerHTML = '<i class="fa-solid fa-arrow-trend-up"></i> Improve your average <b>+' + plan.gap + '</b> to reach <b>' + esc(plan.uni.name) + '</b>' +
-                    (dl ? ' · <span class="dshacad__due">by ' + fmtMonth(dl.date) + '</span>' : '');
-            } else if (plan && plan.gap <= 0) {
-                pEl.style.display = ''; pEl.innerHTML = '<i class="fa-solid fa-circle-check" style="color:#27ae60"></i> You\'re on track for <b>' + esc(plan.uni.name) + '</b> 🎉';
-            } else { pEl.style.display = 'none'; }
+        var box = document.getElementById('ovGrades'); if (!box) return;
+        // A quiet card: the average on a thin ring (the tick is your aim's bar),
+        // one slim bar per subject with the same tick, readiness as small pills.
+        var o = overallAvg(), avg = o == null ? null : Math.round(toPct(o));
+        var aim = aimUni(), barPct = aim ? recPct(aim) : null, c = closeness(), up = c != null && c >= 70;
+        var fmtG = function (v) { var mx = scaleMax(); return mx <= 10 ? (Math.round(v * 10) / 10).toString() : String(Math.round(v)); };
+        var subs = GB.subjects.map(function (s) { return { s: s, v: subjAvg(s) }; }).filter(function (x) { return x.v != null; });
+        var need = {}; attentionSubjects().forEach(function (x) { need[x.name] = x.need; });
+        var ring = function (p, tick) {
+            var t = tick == null ? '' : (function () { var ang = (tick / 100) * 2 * Math.PI - Math.PI / 2, x1 = 60 + Math.cos(ang) * 47, y1 = 60 + Math.sin(ang) * 47, x2 = 60 + Math.cos(ang) * 57, y2 = 60 + Math.sin(ang) * 57;
+                return '<line class="ovg__tick" x1="' + x1.toFixed(1) + '" y1="' + y1.toFixed(1) + '" x2="' + x2.toFixed(1) + '" y2="' + y2.toFixed(1) + '"/>'; })();
+            return '<svg viewBox="0 0 120 120" aria-hidden="true"><circle class="ovg__trk" cx="60" cy="60" r="52"/><circle class="ovg__arc" cx="60" cy="60" r="52" pathLength="100" style="--p:' + (p || 0) + '"/>' + t + '</svg>';
+        };
+        var ids = allTargetIds().slice(0, 3);
+        var pills = ids.map(function (id) { var u = findUni(id); if (!u) return ''; var p = readinessPct(u);
+            return p == null ? '' : '<span class="ovg__pill" style="--c:' + ringColor(p) + '"><i></i>' + esc(u.abbr || shortName(u.name)) + ' <b>' + p + '%</b></span>'; }).join('');
+        var plan = improvementPlan(), goal = '';
+        if (plan && plan.gap > 0) {
+            var dl = null; try { dl = getDlCustom().filter(function (d) { return /^gbgoal_|^gbplan_/.test(d.id); }).sort(function (a, b) { return a.date.localeCompare(b.date); })[0]; } catch (e) {}
+            goal = '<p class="ovg__goal"><i class="fa-solid fa-arrow-trend-up" aria-hidden="true"></i><span>Lift your average by <b>+' + plan.gap + '</b> to reach <b>' + esc(plan.uni.name) + '</b>' + (dl ? ' <em>· by ' + fmtMonth(dl.date) + '</em>' : '') + '</span></p>';
+        } else if (plan) goal = '<p class="ovg__goal is-good"><i class="fa-solid fa-circle-check" aria-hidden="true"></i><span>On track for <b>' + esc(plan.uni.name) + '</b></span></p>';
+        box.innerHTML =
+            '<div class="ovg__main">' +
+                '<div class="ovg__ring' + (avg == null ? '' : up ? ' is-up' : ' is-down') + '">' + ring(avg, barPct) +
+                    '<div class="ovg__num"><b data-to="' + (avg == null ? '' : avg) + '">' + (avg == null ? '—' : avg) + '</b><small>average</small></div></div>' +
+                '<div class="ovg__meta">' +
+                    (c == null ? '' : '<span class="ovg__status ' + (up ? 'is-up' : 'is-down') + '"><i class="fa-solid ' + (up ? 'fa-arrow-up' : 'fa-arrow-down') + '" aria-hidden="true"></i>' + (up ? 'On track' : 'Needs a push') + '</span>') +
+                    '<p class="ovg__line">' + subs.length + ' subject' + (subs.length === 1 ? '' : 's') + (aim ? ' · aiming for <b>' + esc(aim.abbr || shortName(aim.name)) + '</b>' + (c != null ? ' — ' + c + '% there' : '') : ' · pick a dream university in the Gradebook') + '</p>' +
+                    (pills ? '<div class="ovg__pills">' + pills + '</div>' : '') +
+                '</div>' +
+            '</div>' +
+            '<ul class="ovg__subs">' + subs.slice(0, 6).map(function (x, i) {
+                var p = toPct(x.v) / 100, n = need[x.s.name];
+                return '<li style="--i:' + i + ';--v:' + p.toFixed(3) + ';--dot:' + esc(x.s.color || 'var(--ov-ink)') + '"' + (barPct ? ' data-bar' : '') + '>' +
+                    '<span class="ovg__sn">' + esc(x.s.name) + '</span>' +
+                    '<i class="ovg__bar"><s></s>' + (barPct ? '<u style="--b:' + (barPct / 100).toFixed(3) + '"></u>' : '') + '</i>' +
+                    '<b class="ovg__sv">' + fmtG(x.v) + (n ? '<em>+' + n + '</em>' : '') + '</b></li>';
+            }).join('') + '</ul>' +
+            goal;
+        if (!w._ovgSeen && avg != null && !(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+            w._ovgSeen = true;
+            var el = box.querySelector('.ovg__num b'), t0 = performance.now();
+            (function step(now) { var k = Math.min(1, (now - t0) / 900), e = 1 - Math.pow(1 - k, 3); el.textContent = Math.round(avg * e); if (k < 1) requestAnimationFrame(step); })(t0);
         }
     }
+    function shortName(n) { return String(n || '').replace(/^(University of|The University of|Universidad de|Universit[àa] (di|degli))\s*/i, ''); }
 
     /* ── Master render + persistence ───────────────────────── */
     function renderAll() {
         renderOverall(); renderSubjects(); renderReadiness(); renderAttention();
         renderTargetPanel(); renderGaps(); renderPlan(); renderSuggest(); renderRecs(); renderWidget();
+        if (typeof window.gbCardRender === 'function') { try { window.gbCardRender(); } catch (e) {} }
     }
+    // Read-only view of the gradebook for the average card (gradebookRings.js).
+    window.gbSnapshot = function () {
+        var aim = aimUni(), o = overallAvg(), ib = null;
+        if (GB.scale === 'ib') {
+            var best = GB.subjects.map(subjAvg).filter(function (v) { return v != null; }).sort(function (a, b) { return b - a; });
+            if (best.length) ib = { n: best.length, pts: Math.round(best.length >= 6 ? best.slice(0, 6).reduce(function (a, b) { return a + b; }, 0) : best.reduce(function (a, b) { return a + b; }, 0) / best.length * 6) };
+        }
+        return { scale: GB.scale, max: scaleMax(), hint: scaleDef().hint, label: scaleDef().label,
+            subjects: GB.subjects.map(function (s) {
+                var m = subjMarks(s);
+                return { id: s.id, name: s.name, color: s.color, avg: subjAvg(s), goal: s.goal != null && s.goal !== '' ? +s.goal : null,
+                         marks: m.length, exams: (s.sem1 ? s.sem1.length : 0) + (s.sem2 ? s.sem2.length : 0),
+                         best: m.length ? Math.max.apply(null, m) : null, latest: m.length ? m[m.length - 1] : null };
+            }),
+            avg: o, ready: closeness(), ib: ib,
+            req: aim ? reqMark(aim) : null, gap: aim && o != null ? Math.round((reqMark(aim) - o) * 10) / 10 : null,
+            aim: aim ? (aim.abbr && aim.abbr.length <= 12 ? aim.abbr : aim.name) : null, aimName: aim ? aim.name : null };
+    };
     function commit(msg) { save(GB); renderAll(); if (window.refreshChanceBadges) window.refreshChanceBadges(); if (msg) toast(msg); }
-    window.renderGradebook = renderAll;
-    window.renderAcademicWidget = renderWidget;
+    window.renderGradebook = function () { try { renderAll(); } catch (e) { console.error('renderGradebook failed:', e); } };
+    window.renderAcademicWidget = function () { try { renderWidget(); } catch (e) { console.error('renderAcademicWidget failed:', e); } };
 
     function toast(msg) {
         var bar = document.createElement('div');
@@ -8244,7 +10485,7 @@ function applyExploreMatcherLayout() {
         if (e.target.closest('#gbSuggestExplore')) { suggestUseExplore = !suggestUseExplore; suggestPage = 1; renderSuggestModal(); return; }
         if (e.target.closest('#gbSgPrev')) { suggestPage--; renderSuggestModal(); return; }
         if (e.target.closest('#gbSgNext')) { suggestPage++; renderSuggestModal(); return; }
-        var card = e.target.closest('.gbsg__card');
+        var card = e.target.closest('.gbsg__card, .gsx-card');
         if (card && card.dataset.id) {
             var u = (typeof UNI !== 'undefined') ? UNI.find(function (x) { return x.id === card.dataset.id; }) : null;
             if (u && typeof showUniDetail === 'function') { closeSuggestModal(); showUniDetail(u); }
@@ -8541,9 +10782,11 @@ function applyExploreMatcherLayout() {
     });
     var yr = document.getElementById('gbYear'); if (yr) yr.textContent = new Date().getFullYear();
 
-    renderWidget();
+    // Belt-and-suspenders: a hiccup rendering an old/odd gradebook must never take
+    // the whole page down (this used to freeze the app for older accounts).
+    try { renderWidget(); } catch (e) { try { console.error('Gradebook widget init failed:', e); } catch (_) {} }
     var gbNav = document.querySelector('.mp__nav__btn[data-tab="gradebook"]');
-    if (gbNav) gbNav.addEventListener('click', renderAll);
+    if (gbNav) gbNav.addEventListener('click', function () { try { renderAll(); } catch (e) { console.error(e); } });
 }());
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -8581,3 +10824,169 @@ function applyExploreMatcherLayout() {
       'manual'), so adding imports later needs only `external_id`, `max_grade`, `scale` —
       additive columns, zero migration of existing data.
    ════════════════════════════════════════════════════════════════════════════ */
+
+/* ════════════════════════════════════════════════════════════════════════════
+   University Feed tabs (Saved / News) + "Today in Education" news modal.
+   The News tab opens a modal that pulls the daily top-10 from /api/news
+   (served by the news.js agent). Posts are rendered Instagram-style.
+   ════════════════════════════════════════════════════════════════════════════ */
+(function () {
+    var tabs    = document.querySelectorAll('.mp__feed__tab');
+    var overlay = document.getElementById('newsOverlay');
+    var modal   = document.getElementById('newsModal');
+    var grid    = document.getElementById('newsGrid');
+    var loading = document.getElementById('newsLoading');
+    var dateBtn = document.getElementById('newsDate');
+    var dateLbl = document.getElementById('newsDateLabel');
+    var refreshEl = document.getElementById('newsRefresh');
+    var calEl   = document.getElementById('newsCal');
+    if (!tabs.length || !modal) return;
+
+    var loaded = false, loadedAt = 0, nextRefresh = 0, curDate = null;
+    var availDates = {}, calMonth = null, cdTimer = null;
+
+    function apiBase() { return (typeof PAY_API_BASE !== 'undefined' && PAY_API_BASE) ? PAY_API_BASE : ''; }
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+    function pad(n) { return (n < 10 ? '0' : '') + n; }
+    function ymd(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+    function todayYmd() { return ymd(new Date()); }
+    function setActive(name) { Array.prototype.forEach.call(tabs, function (t) { t.classList.toggle('active', t.dataset.ftab === name); }); }
+
+    Array.prototype.forEach.call(tabs, function (t) {
+        t.addEventListener('click', function () {
+            if (t.dataset.ftab === 'news') { setActive('news'); openNews(); }
+            else { setActive('saved'); }
+        });
+    });
+
+    function openNews() {
+        overlay.classList.add('open'); modal.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        loadDates();
+        if (!loaded || (Date.now() - loadedAt) > 6 * 3600 * 1000) fetchNews(null);
+        else if (curDate === todayYmd()) startCountdown();
+    }
+    function closeNews() {
+        overlay.classList.remove('open'); modal.classList.remove('open');
+        document.body.style.overflow = ''; closeCal(); setActive('saved');
+        if (cdTimer) { clearInterval(cdTimer); cdTimer = null; }
+    }
+    document.getElementById('newsClose').addEventListener('click', closeNews);
+    overlay.addEventListener('click', closeNews);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.classList.contains('open')) { if (calEl.classList.contains('open')) closeCal(); else closeNews(); } });
+
+    function fmtDate(dstr) {
+        try { var p = String(dstr).split('-'); var d = new Date(+p[0], +p[1] - 1, +p[2]);
+            return new Intl.DateTimeFormat('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }).format(d); }
+        catch (e) { return dstr; }
+    }
+
+    /* ── Countdown to the next 11:00 (local time) — the brief refreshes daily
+       at 11am, NOT 24h after you opened the page. ── */
+    function nextElevenAM() {
+        var n = new Date(), t = new Date(n);
+        t.setHours(11, 0, 0, 0);
+        if (t.getTime() <= n.getTime()) t.setDate(t.getDate() + 1);
+        return t.getTime();
+    }
+    function startCountdown() {
+        if (cdTimer) clearInterval(cdTimer);
+        function tick() {
+            var ms = nextElevenAM() - Date.now();
+            if (ms <= 0) { refreshEl.innerHTML = '<i class="fa-solid fa-rotate"></i> refreshing…'; return; }
+            var h = Math.floor(ms / 3600000), m = Math.floor((ms % 3600000) / 60000);
+            refreshEl.innerHTML = '<i class="fa-solid fa-rotate"></i> refreshes in ' + (h > 0 ? h + 'h ' : '') + m + 'm';
+        }
+        tick(); cdTimer = setInterval(tick, 30000);
+    }
+
+    function fetchNews(dateStr) {
+        loading.style.display = 'block';
+        loading.innerHTML = '<span class="news__spin" aria-hidden="true"></span> Gathering today’s stories…';
+        grid.innerHTML = '';
+        var url = apiBase() + '/api/news' + (dateStr ? ('?date=' + encodeURIComponent(dateStr)) : '');
+        fetch(url).then(function (r) { return r.json(); }).then(function (d) {
+            loaded = true; loadedAt = Date.now();
+            curDate = d.date || dateStr || todayYmd();
+            nextRefresh = d.nextRefresh || 0;
+            var items = (d && d.items) || [];
+            dateLbl.textContent = fmtDate(curDate);
+            if (curDate === todayYmd()) startCountdown();
+            else { if (cdTimer) { clearInterval(cdTimer); cdTimer = null; } refreshEl.innerHTML = '<i class="fa-solid fa-clock-rotate-left"></i> archived brief'; }
+            if (!items.length) { loading.innerHTML = '<i class="fa-regular fa-newspaper"></i> No stories for this day.'; return; }
+            loading.style.display = 'none';
+            grid.innerHTML = items.map(cardHtml).join('');
+            var cnt = document.getElementById('newsCount'); if (cnt) cnt.textContent = items.length + ' stories';
+            Array.prototype.forEach.call(grid.querySelectorAll('.news__post'), function (el) {
+                var go = function () { var u = el.getAttribute('data-url'); if (u) window.open(u, '_blank', 'noopener'); };
+                el.addEventListener('click', go);
+                el.addEventListener('keydown', function (e) { if (e.key === 'Enter') go(); });
+            });
+        }).catch(function () {
+            loading.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> Couldn’t load the news. Is the server running?';
+        });
+    }
+
+    // Editorial cards: the first story leads (big picture + the longer summary),
+    // the rest are numbered like a printed brief.
+    function cardHtml(it, i) {
+        var n = (i + 1 < 10 ? '0' : '') + (i + 1), lead = i === 0;
+        return '<article class="news__post' + (lead ? ' news__post--lead' : '') + '" data-url="' + esc(it.url || '') + '" style="--i:' + i + '" tabindex="0">' +
+            '<div class="news__post__media' + (it.image ? '' : ' is-noimg') + '">' +
+                (it.image ? '<img src="' + esc(it.image) + '" alt="" loading="lazy" decoding="async" onerror="this.parentNode.classList.add(\'is-noimg\');this.remove()">' : '') +
+                '<span class="news__post__ph" aria-hidden="true">' + esc((it.category || 'News').charAt(0)) + '</span>' +
+            '</div>' +
+            '<div class="news__post__body">' +
+                '<div class="news__post__meta"><span class="news__post__num">' + n + '</span>' + (it.category ? '<span class="news__post__cat">' + esc(it.category) + '</span>' : '') + '</div>' +
+                '<h3 class="news__post__title">' + esc(it.title || '') + '</h3>' +
+                ((lead ? (it.detail || it.subtitle) : it.subtitle) ? '<p class="news__post__sub">' + esc(lead ? (it.detail || it.subtitle) : it.subtitle) + '</p>' : '') +
+                '<span class="news__post__more">Read the story <i class="fa-solid fa-arrow-right"></i></span>' +
+            '</div>' +
+        '</article>';
+    }
+
+    /* ── Day picker (past days with an archive; future disabled) ── */
+    function loadDates() {
+        fetch(apiBase() + '/api/news/dates').then(function (r) { return r.json(); })
+            .then(function (d) { (d.dates || []).forEach(function (x) { availDates[x] = true; }); if (calEl.classList.contains('open')) renderCal(); })
+            .catch(function () {});
+    }
+    function openCal() {
+        var seed = curDate ? curDate.split('-') : todayYmd().split('-');
+        calMonth = new Date(+seed[0], +seed[1] - 1, 1);
+        renderCal(); calEl.classList.add('open'); dateBtn.classList.add('open');
+        setTimeout(function () { document.addEventListener('mousedown', onDocDown, true); }, 0);
+    }
+    function closeCal() { calEl.classList.remove('open'); dateBtn.classList.remove('open'); document.removeEventListener('mousedown', onDocDown, true); }
+    function onDocDown(e) { if (!calEl.contains(e.target) && !dateBtn.contains(e.target)) closeCal(); }
+    dateBtn.addEventListener('click', function (e) { e.stopPropagation(); if (calEl.classList.contains('open')) closeCal(); else openCal(); });
+
+    function renderCal() {
+        var y = calMonth.getFullYear(), mo = calMonth.getMonth(), today = todayYmd(), now = new Date();
+        var startDow = (new Date(y, mo, 1).getDay() + 6) % 7;          // Monday-first
+        var days = new Date(y, mo + 1, 0).getDate();
+        var atCurrent = (y === now.getFullYear() && mo === now.getMonth());
+        var title = new Intl.DateTimeFormat('en', { month: 'long', year: 'numeric' }).format(calMonth);
+        var html = '<div class="news__cal__hd">' +
+            '<button class="news__cal__nav" data-nav="-1" aria-label="Previous month"><i class="fa-solid fa-chevron-left"></i></button>' +
+            '<span class="news__cal__title">' + title + '</span>' +
+            '<button class="news__cal__nav" data-nav="1"' + (atCurrent ? ' disabled' : '') + ' aria-label="Next month"><i class="fa-solid fa-chevron-right"></i></button>' +
+        '</div><div class="news__cal__grid">';
+        ['M', 'T', 'W', 'T', 'F', 'S', 'S'].forEach(function (d) { html += '<div class="news__cal__dow">' + d + '</div>'; });
+        for (var i = 0; i < startDow; i++) html += '<button class="news__cal__day empty" disabled></button>';
+        for (var day = 1; day <= days; day++) {
+            var ds = y + '-' + pad(mo + 1) + '-' + pad(day);
+            var disabled = (ds > today) || !(availDates[ds] || ds === today);
+            var cls = 'news__cal__day' + (ds === today ? ' today' : '') + (ds === curDate ? ' selected' : '');
+            html += '<button class="' + cls + '" data-date="' + ds + '"' + (disabled ? ' disabled' : '') + '>' + day + '</button>';
+        }
+        calEl.innerHTML = html + '</div>';
+        Array.prototype.forEach.call(calEl.querySelectorAll('.news__cal__nav'), function (b) {
+            b.addEventListener('click', function (e) { e.stopPropagation(); if (b.disabled) return; calMonth = new Date(y, mo + parseInt(b.dataset.nav, 10), 1); renderCal(); });
+        });
+        Array.prototype.forEach.call(calEl.querySelectorAll('.news__cal__day[data-date]'), function (b) {
+            if (b.disabled) return;
+            b.addEventListener('click', function (e) { e.stopPropagation(); closeCal(); var ds = b.dataset.date; fetchNews(ds === todayYmd() ? null : ds); });
+        });
+    }
+}());

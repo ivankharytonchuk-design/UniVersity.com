@@ -20,7 +20,11 @@ const RAW = process.env.DATABASE_URL || '';
 // Strip query params (sslmode/channel_binding) — SSL is set explicitly below,
 // which also avoids node-postgres' sslmode-alias deprecation warning.
 const CONN = RAW.split('?')[0];
-const pool = RAW ? new Pool({ connectionString: CONN, ssl: { rejectUnauthorized: false } }) : null;
+const pool = RAW ? new Pool({ connectionString: CONN, ssl: { rejectUnauthorized: false }, keepAlive: true, idleTimeoutMillis: 30000 }) : null;
+// An idle client that drops (Neon closes idle connections; a sleeping Mac times
+// them out) emits 'error' on the pool. Unhandled, that kills the whole server —
+// log it instead; the pool simply opens a new connection next time.
+if (pool) pool.on('error', (e) => console.error(new Date().toISOString(), '[store] idle Postgres connection dropped:', e.code || e.message));
 
 const SESSION_DAYS = 60;
 const norm = (e) => String(e || '').trim().toLowerCase();
@@ -56,6 +60,13 @@ async function init() {
     CREATE TABLE IF NOT EXISTS digest_optout (
       email      TEXT PRIMARY KEY,
       created_at TIMESTAMPTZ DEFAULT now()
+    );
+    CREATE TABLE IF NOT EXISTS digest_state (
+      email        TEXT PRIMARY KEY,
+      universities JSONB,
+      country      TEXT,
+      seen         JSONB,
+      updated_at   TIMESTAMPTZ DEFAULT now()
     );
   `);
   console.log('[store] Postgres schema ready.');
@@ -142,8 +153,33 @@ async function getDigestOptOuts() {
   return r.rows.map((x) => x.email);
 }
 
+// ── Durable digest state: the user's LIVE saved list (source of truth for the
+//    email agent) + headlines already emailed, so only new updates are sent ──
+async function setDigestPrefs(email, universities, country) {
+  if (!pool || !email) return;
+  await pool.query(
+    'INSERT INTO digest_state (email, universities, country, updated_at) VALUES ($1,$2,$3,now()) ' +
+    'ON CONFLICT (email) DO UPDATE SET universities=$2, country=$3, updated_at=now()',
+    [norm(email), JSON.stringify(universities || []), country || null]);
+}
+async function setDigestSeen(email, seen) {
+  if (!pool || !email) return;
+  await pool.query(
+    'INSERT INTO digest_state (email, seen) VALUES ($1,$2) ON CONFLICT (email) DO UPDATE SET seen=$2',
+    [norm(email), JSON.stringify(seen || [])]);
+}
+async function getDigestStates() {
+  if (!pool) return [];
+  const r = await pool.query('SELECT email, universities, country, seen FROM digest_state');
+  return r.rows;
+}
+
+// Raw read access for the admin panel (admin.js) — null when Postgres isn't configured.
+function query(sql, params) { return pool ? pool.query(sql, params) : Promise.reject(new Error('db_disabled')); }
+
 module.exports = {
-  enabled, init, register, login, userForToken, logout,
+  enabled, init, register, login, userForToken, logout, query,
   getData, getAllData, putData, deleteData,
   setDigestOptOut, getDigestOptOuts,
+  setDigestPrefs, setDigestSeen, getDigestStates,
 };
